@@ -39,37 +39,44 @@ const (
 	stateCloning
 )
 
+// Message types for sub-models
+type AnalyzeRepoMsg struct {
+	repoName string
+}
+
+type BackToMenuMsg struct{}
+
+type SwitchToInputMsg struct{}
+
+type ErrorMsg error
+
 type MainModel struct {
-	state           sessionState
-	menu            MenuModel
-	input           string // Repository input
-	compareInput1   string // First repo for comparison
-	compareInput2   string // Second repo for comparison
-	compareStep     int    // 0 = entering first repo, 1 = entering second repo
-	spinner         spinner.Model
-	dashboard       DashboardModel
-	tree            TreeModel
-	fileEdit        FileEditModel
-	help            help.Model
-	progress        *ProgressTracker
-	animTick        int
-	err             error
-	windowWidth     int
-	windowHeight    int
-	analysisType    string // quick, detailed, custom
-	appSettings     tea.LogOptionsSetter
-	compareResult   *CompareResult      // Holds comparison data
-	history         *History            // Analysis history
-	historyCursor   int                 // Current selection in history
-	helpContent     string              // Content for help screen
-	settingsOption  string              // Selected settings option
-	cache           *cache.Cache        // Offline cache for analysis results
-	cacheStatus     string              // Cache status: "fresh", "cached", "expired", ""
-	favorites       *Favorites          // Favorite repositories
-	favoritesCursor int                 // Current selection in favorites
-	appConfig       *config.AppSettings // Application settings
-	tokenInput      string              // Buffer for token input
-	inTokenInput    bool                // Whether currently inputting token
+	state sessionState
+
+	// Sub-models for different UI states
+	menu             MenuModel
+	input            InputModel
+	loading          LoadingModel
+	compareInput     CompareInputModel
+	compareLoading   CompareLoadingModel
+	compareResult    CompareResultModel
+	settings         SettingsModel
+	help             HelpModel
+	history          HistoryModel
+	favorites        FavoritesModel
+	cloneInput       CloneInputModel
+	cloning          CloningModel
+
+	// Shared models
+	dashboard DashboardModel
+	tree      TreeModel
+	fileEdit  FileEditModel
+
+	// Shared state
+	windowWidth  int
+	windowHeight int
+	cache        *cache.Cache
+	appConfig    *config.AppSettings
 }
 
 // NewMainModel creates a new main application model with default settings.
@@ -93,13 +100,23 @@ func NewMainModel() MainModel {
 	}
 
 	return MainModel{
-		state:     stateMenu,
-		menu:      NewMenuModel(),
-		spinner:   s,
-		dashboard: NewDashboardModel(),
-		tree:      NewTreeModel(nil),
-		cache:     repoCache,
-		appConfig: appConfig,
+		state:           stateMenu,
+		menu:            NewMenuModel(),
+		input:           NewInputModel(),
+		loading:         NewLoadingModel(),
+		compareInput:    NewCompareInputModel(),
+		compareLoading:  NewCompareLoadingModel(),
+		compareResult:   NewCompareResultModel(),
+		settings:        NewSettingsModel(),
+		help:            NewHelpModel(),
+		history:         NewHistoryModel(),
+		favorites:       NewFavoritesModel(),
+		cloneInput:      NewCloneInputModel(),
+		cloning:         NewCloningModel(),
+		dashboard:       NewDashboardModel(),
+		tree:            NewTreeModel(nil),
+		cache:           repoCache,
+		appConfig:       appConfig,
 	}
 }
 
@@ -251,115 +268,37 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case stateInput:
+		newInput, cmd := m.input.Update(msg)
+		m.input = newInput.(InputModel)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		// Handle messages from input model
 		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.Type {
-			case tea.KeyEnter:
-				cleanInput := sanitizeRepoInput(m.input)
-
-				if cleanInput != "" {
-					m.input = cleanInput
-					m.err = nil
-					m.state = stateLoading
-					cmds = append(cmds, m.analyzeRepo(cleanInput), TickProgressCmd())
-				} else {
-					m.err = fmt.Errorf("please enter a valid repository (owner/repo or GitHub URL)")
-					// Stay in input state to display error immediately
-				}
-
-			case tea.KeyBackspace:
-				if len(m.input) > 0 {
-					m.input = m.input[:len(m.input)-1]
-				}
-			case tea.KeyRunes:
-				m.input += string(msg.Runes)
-			case tea.KeyEsc:
-				m.state = stateMenu
-			case tea.KeyCtrlU:
-				m.input = "" // Clear entire line
-			case tea.KeyCtrlA:
-				// Move to start - for TUI we just clear (no cursor)
-				// In a real implementation, you'd track cursor position
-			case tea.KeyCtrlE:
-				// Move to end - already at end in this simple impl
-			case tea.KeyCtrlW:
-				// Delete word backward
-				m.input = strings.TrimRight(m.input, " ")
-				if idx := strings.LastIndex(m.input, " "); idx >= 0 {
-					m.input = m.input[:idx+1]
-				} else {
-					m.input = ""
-				}
-			}
+		case AnalyzeRepoMsg:
+			m.state = stateLoading
+			m.loading.SetRepoName(msg.repoName)
+			cmds = append(cmds, m.analyzeRepo(msg.repoName), TickProgressCmd())
+		case BackToMenuMsg:
+			m.state = stateMenu
 		}
 
 	case stateCompareInput:
+		newCompareInput, cmd := m.compareInput.Update(msg)
+		m.compareInput = newCompareInput.(CompareInputModel)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		// Handle messages from compare input model
 		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.Type {
-			case tea.KeyEnter:
-				if m.compareStep == 0 && m.compareInput1 != "" {
-					// Sanitize first repo
-					m.compareInput1 = sanitizeRepoInput(m.compareInput1)
-					m.compareStep = 1
-
-				} else if m.compareStep == 1 && m.compareInput2 != "" {
-					// Sanitize both repos before comparison
-					m.compareInput1 = sanitizeRepoInput(m.compareInput1)
-					m.compareInput2 = sanitizeRepoInput(m.compareInput2)
-
-					m.err = nil
-					m.state = stateCompareLoading
-					cmds = append(cmds, m.compareRepos(m.compareInput1, m.compareInput2), TickProgressCmd())
-				}
-
-			case tea.KeyBackspace:
-				if m.compareStep == 0 && len(m.compareInput1) > 0 {
-					m.compareInput1 = m.compareInput1[:len(m.compareInput1)-1]
-				} else if m.compareStep == 1 && len(m.compareInput2) > 0 {
-					m.compareInput2 = m.compareInput2[:len(m.compareInput2)-1]
-				}
-			case tea.KeyRunes:
-				if m.compareStep == 0 {
-					m.compareInput1 += string(msg.Runes)
-				} else {
-					m.compareInput2 += string(msg.Runes)
-				}
-			case tea.KeyEsc:
-				if m.compareStep == 1 {
-					// Go back to first repo input
-					m.compareStep = 0
-				} else {
-					m.state = stateMenu
-					m.menu.Done = false
-					m.compareInput1 = ""
-					m.compareInput2 = ""
-				}
-			case tea.KeyCtrlU:
-				// Clear current input
-				if m.compareStep == 0 {
-					m.compareInput1 = ""
-				} else {
-					m.compareInput2 = ""
-				}
-			case tea.KeyCtrlW:
-				// Delete word backward
-				if m.compareStep == 0 {
-					m.compareInput1 = strings.TrimRight(m.compareInput1, " ")
-					if idx := strings.LastIndex(m.compareInput1, " "); idx >= 0 {
-						m.compareInput1 = m.compareInput1[:idx+1]
-					} else {
-						m.compareInput1 = ""
-					}
-				} else {
-					m.compareInput2 = strings.TrimRight(m.compareInput2, " ")
-					if idx := strings.LastIndex(m.compareInput2, " "); idx >= 0 {
-						m.compareInput2 = m.compareInput2[:idx+1]
-					} else {
-						m.compareInput2 = ""
-					}
-				}
-			}
+		case CompareReposMsg:
+			m.state = stateCompareLoading
+			m.compareLoading.SetRepoNames(msg.repo1, msg.repo2)
+			cmds = append(cmds, m.compareRepos(msg.repo1, msg.repo2), TickProgressCmd())
+		case BackToMenuMsg:
+			m.state = stateMenu
 		}
 
 	case stateCompareLoading:
@@ -764,84 +703,33 @@ func (m MainModel) View() string {
 	case stateMenu:
 		return m.menu.View()
 	case stateInput:
-		return m.inputView()
-	case stateCompareInput:
-		return m.compareInputView()
-	case stateFavorites:
-		return m.favoritesView()
-	case stateHistory:
-		return m.historyView()
-	case stateCloneInput:
-		return m.cloneInputView()
-	case stateCloning:
-		return m.cloningView()
+		return m.input.View(m.windowWidth, m.windowHeight)
 	case stateLoading:
-		loadMsg := fmt.Sprintf("📊 Analyzing %s", m.input)
-		if m.analysisType != "" {
-			loadMsg += fmt.Sprintf(" (%s mode)", strings.ToUpper(m.analysisType))
-		}
-
-		statusView := fmt.Sprintf("%s %s...", m.spinner.View(), loadMsg)
-
-		if len(SatelliteFrames) > 0 {
-			frame := SatelliteFrames[m.animTick%len(SatelliteFrames)]
-			statusView += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#00E5FF")).Render(frame)
-		}
-
-		// Show progress stages if available
-		if m.progress != nil {
-			stages := m.progress.GetAllStages()
-			statusView += "\n\n"
-			for _, stage := range stages {
-				prefix := "⏳ "
-				if stage.IsComplete {
-					prefix = "✅ "
-				} else if stage.IsActive {
-					prefix = "⚙️  "
-				}
-				statusView += prefix + stage.Name + "\n"
-			}
-
-			// Add elapsed time
-			elapsed := m.progress.GetElapsedTime()
-			statusView += fmt.Sprintf("\n⏱️  %ds elapsed", int(elapsed.Seconds()))
-		}
-
-		statusView += "\n\n" + SubtleStyle.Render("Press ESC to cancel")
-
-		return lipgloss.Place(
-			m.windowWidth, m.windowHeight,
-			lipgloss.Center, lipgloss.Center,
-			statusView,
-		)
+		return m.loading.View(m.windowWidth, m.windowHeight)
+	case stateCompareInput:
+		return m.compareInput.View(m.windowWidth, m.windowHeight)
 	case stateCompareLoading:
-		loadMsg := fmt.Sprintf("📊 Comparing %s vs %s", m.compareInput1, m.compareInput2)
-		statusView := fmt.Sprintf("%s %s...", m.spinner.View(), loadMsg)
-
-		if len(SatelliteFrames) > 0 {
-			frame := SatelliteFrames[m.animTick%len(SatelliteFrames)]
-			statusView += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#00E5FF")).Render(frame)
-		}
-
-		statusView += "\n\n" + SubtleStyle.Render("Press ESC to cancel")
-
-		return lipgloss.Place(
-			m.windowWidth, m.windowHeight,
-			lipgloss.Center, lipgloss.Center,
-			statusView,
-		)
+		return m.compareLoading.View(m.windowWidth, m.windowHeight)
 	case stateCompareResult:
-		return m.compareResultView()
+		return m.compareResult.View(m.windowWidth, m.windowHeight)
+	case stateSettings:
+		return m.settings.View(m.windowWidth, m.windowHeight)
+	case stateHelp:
+		return m.help.View(m.windowWidth, m.windowHeight)
+	case stateHistory:
+		return m.history.View(m.windowWidth, m.windowHeight)
+	case stateFavorites:
+		return m.favorites.View(m.windowWidth, m.windowHeight)
+	case stateCloneInput:
+		return m.cloneInput.View(m.windowWidth, m.windowHeight)
+	case stateCloning:
+		return m.cloning.View(m.windowWidth, m.windowHeight)
+	case stateDashboard:
+		return m.dashboard.View()
 	case stateTree:
 		return m.tree.View()
 	case stateFileEdit:
 		return m.fileEdit.View()
-	case stateHelp:
-		return m.helpView()
-	case stateSettings:
-		return m.settingsView()
-	case stateDashboard:
-		return m.dashboard.View()
 	}
 	return ""
 }

@@ -1,137 +1,126 @@
-// Package ui provides favorites/bookmarks functionality for repositories.
 package ui
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"time"
+	"fmt"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
-// Favorite represents a bookmarked repository
-type Favorite struct {
-	RepoName  string    `json:"repo_name"`
-	AddedAt   time.Time `json:"added_at"`
-	LastUsed  time.Time `json:"last_used"`
-	UseCount  int       `json:"use_count"`
-	Notes     string    `json:"notes,omitempty"`
+type FavoritesModel struct {
+	favorites *Favorites
+	cursor    int
 }
 
-// Favorites manages the list of favorite repositories
-type Favorites struct {
-	Items []Favorite `json:"items"`
+func NewFavoritesModel() FavoritesModel {
+	return FavoritesModel{}
 }
 
-// LoadFavorites loads favorites from disk
-func LoadFavorites() (*Favorites, error) {
-	path, err := getFavoritesPath()
-	if err != nil {
-		return &Favorites{Items: []Favorite{}}, err
+func (m FavoritesModel) Update(msg tea.Msg) (FavoritesModel, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.favorites != nil && m.cursor < len(m.favorites.Items)-1 {
+				m.cursor++
+			}
+		case "enter":
+			// Analyze selected favorite
+			if m.favorites != nil && len(m.favorites.Items) > 0 {
+				repoName := m.favorites.Items[m.cursor].RepoName
+				m.favorites.UpdateUsage(repoName)
+				m.favorites.Save()
+				return m, func() tea.Msg { return AnalyzeRepoMsg{repoName: repoName} }
+			}
+		case "d":
+			// Remove from favorites
+			if m.favorites != nil && len(m.favorites.Items) > 0 {
+				m.favorites.Remove(m.favorites.Items[m.cursor].RepoName)
+				m.favorites.Save()
+				if m.cursor >= len(m.favorites.Items) && m.cursor > 0 {
+					m.cursor--
+				}
+			}
+		case "a":
+			// Add new favorite (go to input)
+			return m, func() tea.Msg { return SwitchToInputMsg{} }
+		case "q", "esc":
+			return m, func() tea.Msg { return BackToMenuMsg{} }
+		}
 	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return &Favorites{Items: []Favorite{}}, nil // Return empty if file doesn't exist
-	}
-
-	var favs Favorites
-	if err := json.Unmarshal(data, &favs); err != nil {
-		return &Favorites{Items: []Favorite{}}, err
-	}
-
-	return &favs, nil
+	return m, nil
 }
 
-// Save saves favorites to disk
-func (f *Favorites) Save() error {
-	path, err := getFavoritesPath()
-	if err != nil {
-		return err
+func (m FavoritesModel) View(width, height int) string {
+	header := TitleStyle.Render("⭐ Favorite Repositories")
+
+	if m.favorites == nil || len(m.favorites.Items) == 0 {
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			BoxStyle.Render("No favorites yet!\n\nAnalyze a repository and press 'b' to bookmark it."),
+			SubtleStyle.Render("a: add new • q/ESC: back to menu"),
+		)
+
+		return lipgloss.Place(
+			width, height,
+			lipgloss.Center, lipgloss.Center,
+			content,
+		)
 	}
 
-	// Ensure directory exists
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
+	// Build favorites list
+	var lines []string
+	lines = append(lines, fmt.Sprintf("%-35s │ %-10s │ %s", "Repository", "Uses", "Last Used"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("─").Repeat(65))
 
-	data, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(path, data, 0644)
-}
-
-// Add adds a repository to favorites
-func (f *Favorites) Add(repoName string) {
-	// Check if already exists
-	for i, fav := range f.Items {
-		if fav.RepoName == repoName {
-			// Update existing
-			f.Items[i].LastUsed = time.Now()
-			f.Items[i].UseCount++
-			return
+	for i, fav := range m.favorites.Items {
+		prefix := "  "
+		if i == m.cursor {
+			prefix = "▶ "
+		}
+		line := fmt.Sprintf("%s%-33s │ %-10d │ %s",
+			prefix,
+			fav.RepoName,
+			fav.UseCount,
+			fav.LastUsed.Format("2006-01-02"),
+		)
+		if i == m.cursor {
+			lines = append(lines, SelectedStyle.Render(line))
+		} else {
+			lines = append(lines, line)
 		}
 	}
 
-	// Add new
-	f.Items = append([]Favorite{{
-		RepoName: repoName,
-		AddedAt:  time.Now(),
-		LastUsed: time.Now(),
-		UseCount: 1,
-	}}, f.Items...)
+	tableBox := BoxStyle.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	footer := SubtleStyle.Render("↑↓: navigate • Enter: analyze • d: remove • a: add new • q/ESC: back")
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		tableBox,
+		footer,
+	)
+
+	return lipgloss.Place(
+		width, height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
 }
 
-// Remove removes a repository from favorites
-func (f *Favorites) Remove(repoName string) {
-	for i, fav := range f.Items {
-		if fav.RepoName == repoName {
-			f.Items = append(f.Items[:i], f.Items[i+1:]...)
-			return
-		}
-	}
+func (m *FavoritesModel) SetFavorites(favorites *Favorites) {
+	m.favorites = favorites
 }
 
-// IsFavorite checks if a repository is in favorites
-func (f *Favorites) IsFavorite(repoName string) bool {
-	for _, fav := range f.Items {
-		if fav.RepoName == repoName {
-			return true
-		}
-	}
-	return false
+func (m *FavoritesModel) GetCursor() int {
+	return m.cursor
 }
 
-// UpdateUsage updates the last used time and count for a favorite
-func (f *Favorites) UpdateUsage(repoName string) {
-	for i, fav := range f.Items {
-		if fav.RepoName == repoName {
-			f.Items[i].LastUsed = time.Now()
-			f.Items[i].UseCount++
-			return
-		}
-	}
-}
-
-// GetTopFavorites returns the most used favorites
-func (f *Favorites) GetTopFavorites(limit int) []Favorite {
-	if len(f.Items) <= limit {
-		return f.Items
-	}
-	return f.Items[:limit]
-}
-
-// Clear removes all favorites
-func (f *Favorites) Clear() {
-	f.Items = []Favorite{}
-}
-
-func getFavoritesPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".repo-lyzer", "favorites.json"), nil
+func (m *FavoritesModel) SetCursor(cursor int) {
+	m.cursor = cursor
 }
