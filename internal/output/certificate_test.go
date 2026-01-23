@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -83,12 +84,23 @@ func TestExportCertificatePDF(t *testing.T) {
 		},
 	}
 
+	// Check if downloads directory exists
+	downloadsDir, err := getDownloadsDir()
+	if err != nil {
+		t.Skip("Failed to get downloads directory")
+	}
+	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
+		t.Skip("Downloads directory does not exist")
+	}
+
 	// Test PDF export
 	path, err := ExportCertificatePDF(cert)
 	if err != nil {
 		t.Errorf("ExportCertificatePDF failed: %v", err)
 		return
 	}
+
+	defer os.Remove(path)
 
 	// Check that path is not empty
 	if path == "" {
