@@ -168,6 +168,14 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, TickProgressCmd()
 		}
 
+	case AnalyzeRepoMsg:
+		m.state = stateLoading
+		m.loading.SetRepoName(msg.repoName)
+		cmds = append(cmds, m.analyzeRepo(msg.repoName), TickProgressCmd())
+
+	case BackToMenuMsg:
+		m.state = stateMenu
+
 	case string:
 		if msg == "switch_to_tree" {
 			m.state = stateTree
@@ -274,16 +282,6 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
-		// Handle messages from input model
-		switch msg := msg.(type) {
-		case AnalyzeRepoMsg:
-			m.state = stateLoading
-			m.loading.SetRepoName(msg.repoName)
-			cmds = append(cmds, m.analyzeRepo(msg.repoName), TickProgressCmd())
-		case BackToMenuMsg:
-			m.state = stateMenu
-		}
-
 	case stateCompareInput:
 		newCompareInput, cmd := m.compareInput.Update(msg)
 		m.compareInput = newCompareInput.(CompareInputModel)
@@ -324,40 +322,9 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case stateCompareResult:
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "q", "esc":
-				m.state = stateMenu
-				m.compareResult = nil
-				m.compareInput1 = ""
-				m.compareInput2 = ""
-			case "j":
-				// Export comparison to JSON
-				if m.compareResult != nil && m.compareResult.Repo1.Repo != nil && m.compareResult.Repo2.Repo != nil {
-					_, err := ExportCompareJSON(*m.compareResult)
-					if err != nil {
-						m.err = fmt.Errorf("failed to export JSON: %w", err)
-					} else {
-						m.err = fmt.Errorf("✓ Exported comparison to JSON successfully")
-					}
-				} else {
-					m.err = fmt.Errorf("no comparison data available for export")
-				}
-			case "m":
-				// Export comparison to Markdown
-				if m.compareResult != nil && m.compareResult.Repo1.Repo != nil && m.compareResult.Repo2.Repo != nil {
-					_, err := ExportCompareMarkdown(*m.compareResult)
-					if err != nil {
-						m.err = fmt.Errorf("failed to export Markdown: %w", err)
-					} else {
-						m.err = fmt.Errorf("✓ Exported comparison to Markdown successfully")
-					}
-				} else {
-					m.err = fmt.Errorf("no comparison data available for export")
-				}
-			}
-		}
+		newModel, cmd := m.compareResult.Update(msg)
+		m.compareResult = newModel.(CompareResultModel)
+		cmds = append(cmds, cmd)
 
 	case stateLoading:
 		m.spinner, cmd = m.spinner.Update(msg)

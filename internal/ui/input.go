@@ -53,6 +53,10 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 }
 
 func (m InputModel) View(width, height int) string {
+	if width == 0 || height == 0 {
+		return ""
+	}
+
 	inputContent :=
 		TitleStyle.Render("📥 ENTER REPOSITORY") + "\n\n" +
 			InputStyle.Render("> "+m.input) + "\n\n" +
