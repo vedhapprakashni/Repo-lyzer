@@ -121,7 +121,7 @@ func NewMainModel() MainModel {
 }
 
 func (m MainModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	return m.loading.Init()
 }
 
 func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -323,19 +323,18 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stateCompareResult:
 		newModel, cmd := m.compareResult.Update(msg)
-		m.compareResult = newModel.(CompareResultModel)
+		m.compareResult, cmd = newModel.Update(msg)
 		cmds = append(cmds, cmd)
 
 	case stateLoading:
-		m.spinner, cmd = m.spinner.Update(msg)
+		newLoading, cmd := m.loading.Update(msg)
+		m.loading = newLoading.(LoadingModel)
 		cmds = append(cmds, cmd)
 
 		if result, ok := msg.(AnalysisResult); ok {
 			m.dashboard.SetData(result)
 			m.dashboard.SetCacheStatus("fresh")
 			m.state = stateDashboard
-			m.progress = nil
-			m.cacheStatus = "fresh"
 			// Save to history
 			if m.history == nil {
 				m.history, _ = LoadHistory()
@@ -347,8 +346,6 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dashboard.SetData(cachedResult.Result)
 			m.dashboard.SetCacheStatus("cached")
 			m.state = stateDashboard
-			m.progress = nil
-			m.cacheStatus = "cached"
 			// Save to history
 			if m.history == nil {
 				m.history, _ = LoadHistory()
@@ -357,9 +354,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.history.Save()
 		}
 		if err, ok := msg.(error); ok {
-			m.err = err
+			m.input.SetError(err)
 			m.state = stateInput // Go back to input on error
-			m.progress = nil
 		}
 
 	case stateFavorites:
