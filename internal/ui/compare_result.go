@@ -31,7 +31,7 @@ func (m CompareResultModel) Update(msg tea.Msg) (CompareResultModel, tea.Cmd) {
 					if err != nil {
 						return ErrorMsg(fmt.Errorf("failed to export JSON: %w", err))
 					}
-					return ErrorMsg(fmt.Errorf("✓ Exported comparison to JSON successfully"))
+					return StatusMsg("✓ Exported comparison to JSON successfully")
 				}
 			} else {
 				return m, func() tea.Msg {
@@ -46,7 +46,7 @@ func (m CompareResultModel) Update(msg tea.Msg) (CompareResultModel, tea.Cmd) {
 					if err != nil {
 						return ErrorMsg(fmt.Errorf("failed to export Markdown: %w", err))
 					}
-					return ErrorMsg(fmt.Errorf("✓ Exported comparison to Markdown successfully"))
+					return StatusMsg("✓ Exported comparison to Markdown successfully")
 				}
 			} else {
 				return m, func() tea.Msg {
@@ -97,7 +97,7 @@ func (m CompareResultModel) View(width, height int) string {
 	rows := []string{
 		fmt.Sprintf("%-20s │ %-25s │ %-25s", "Metric", r1.Repo.FullName, r2.Repo.FullName),
 		strings.Repeat("─", 75),
-		fmt.Sprintf("%-20s │ %-25d │ %-25d", "⭐ Stars", r1.Repo.Stars, r2.Repo.Forks),
+		fmt.Sprintf("%-20s │ %-25d │ %-25d", "⭐ Stars", r1.Repo.Stars, r2.Repo.Stars),
 		fmt.Sprintf("%-20s │ %-25d │ %-25d", "🍴 Forks", r1.Repo.Forks, r2.Repo.Forks),
 		fmt.Sprintf("%-20s │ %-25d │ %-25d", "📦 Commits (1y)", len(r1.Commits), len(r2.Commits)),
 		fmt.Sprintf("%-20s │ %-25d │ %-25d", "👥 Contributors", len(r1.Contributors), len(r2.Contributors)),

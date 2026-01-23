@@ -1,11 +1,112 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+type Favorite struct {
+	RepoName  string    `json:"repo_name"`
+	UseCount  int       `json:"use_count"`
+	LastUsed  time.Time `json:"last_used"`
+}
+
+type Favorites struct {
+	Items []Favorite `json:"items"`
+}
+
+func (f *Favorites) Add(repoName string) {
+	for i, item := range f.Items {
+		if item.RepoName == repoName {
+			f.Items[i].UseCount++
+			f.Items[i].LastUsed = time.Now()
+			return
+		}
+	}
+	// Add new favorite
+	f.Items = append(f.Items, Favorite{
+		RepoName: repoName,
+		UseCount: 1,
+		LastUsed: time.Now(),
+	})
+}
+
+func (f *Favorites) Remove(repoName string) {
+	for i, item := range f.Items {
+		if item.RepoName == repoName {
+			f.Items = append(f.Items[:i], f.Items[i+1:]...)
+			return
+		}
+	}
+}
+
+func (f *Favorites) UpdateUsage(repoName string) {
+	for i, item := range f.Items {
+		if item.RepoName == repoName {
+			f.Items[i].UseCount++
+			f.Items[i].LastUsed = time.Now()
+			return
+		}
+	}
+}
+
+func (f *Favorites) Save() error {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return err
+	}
+
+	favoritesPath := filepath.Join(configDir, "favorites.json")
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(favoritesPath, data, 0644)
+}
+
+func LoadFavorites() (*Favorites, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return &Favorites{Items: []Favorite{}}, nil
+	}
+
+	favoritesPath := filepath.Join(configDir, "favorites.json")
+	data, err := os.ReadFile(favoritesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &Favorites{Items: []Favorite{}}, nil
+		}
+		return nil, err
+	}
+
+	var favorites Favorites
+	if err := json.Unmarshal(data, &favorites); err != nil {
+		return &Favorites{Items: []Favorite{}}, nil
+	}
+
+	return &favorites, nil
+}
+
+func getConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	configDir := filepath.Join(home, ".repo-lyzer")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return "", err
+	}
+
+	return configDir, nil
+}
 
 type FavoritesModel struct {
 	favorites *Favorites

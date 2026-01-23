@@ -50,6 +50,48 @@ type SwitchToInputMsg struct{}
 
 type ErrorMsg error
 
+type StatusMsg string
+
+// CompareInputModel handles input for repository comparison
+type CompareInputModel struct {
+	step  int
+	repo1 string
+	repo2 string
+	err   error
+}
+
+func NewCompareInputModel() CompareInputModel {
+	return CompareInputModel{}
+}
+
+// SettingsModel handles application settings
+type SettingsModel struct {
+	option string
+}
+
+func NewSettingsModel() SettingsModel {
+	return SettingsModel{}
+}
+
+// HistoryModel handles analysis history
+type HistoryModel struct {
+	entries []HistoryEntry
+	cursor  int
+}
+
+func NewHistoryModel() HistoryModel {
+	return HistoryModel{}
+}
+
+// CloneInputModel handles repository cloning input
+type CloneInputModel struct {
+	input string
+}
+
+func NewCloneInputModel() CloneInputModel {
+	return CloneInputModel{}
+}
+
 type MainModel struct {
 	state sessionState
 
@@ -77,6 +119,20 @@ type MainModel struct {
 	windowHeight int
 	cache        *cache.Cache
 	appConfig    *config.AppSettings
+
+	// Additional fields used in Update method
+	spinner       spinner.Model
+	historyCursor int
+	favoritesCursor int
+	animTick      int
+	err           error
+	analysisType  string
+	compareStep   int
+	compareInput1 string
+	compareInput2 string
+	inTokenInput  bool
+	tokenInput    string
+	settingsOption string
 }
 
 // NewMainModel creates a new main application model with default settings.
@@ -158,7 +214,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateHistory
 			m.historyCursor = 0
 			history, _ := LoadHistory()
-			m.history = history
+			m.history.entries = history.Entries
 			return m, nil
 		}
 
@@ -192,11 +248,12 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg == "add_to_favorites" {
 			// Add current repo to favorites
 			if m.dashboard.data.Repo != nil {
-				if m.favorites == nil {
-					m.favorites, _ = LoadFavorites()
+				if m.favorites.favorites == nil {
+					favs, _ := LoadFavorites()
+					m.favorites.favorites = favs
 				}
-				m.favorites.Add(m.dashboard.data.Repo.FullName)
-				m.favorites.Save()
+				m.favorites.favorites.Add(m.dashboard.data.Repo.FullName)
+				m.favorites.favorites.Save()
 				m.err = fmt.Errorf("⭐ Added to favorites: %s", m.dashboard.data.Repo.FullName)
 			}
 		}
@@ -224,7 +281,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateFavorites
 				m.favoritesCursor = 0
 				favs, _ := LoadFavorites()
-				m.favorites = favs
+				m.favorites.favorites = favs
 				m.menu.Done = false
 			case 2: // Compare
 				m.state = stateCompareInput
@@ -286,7 +343,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stateCompareInput:
 		newCompareInput, cmd := m.compareInput.Update(msg)
-		m.compareInput = newCompareInput.(CompareInputModel)
+		m.compareInput = newCompareInput
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -404,25 +461,25 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.favoritesCursor--
 				}
 			case "down", "j":
-				if m.favorites != nil && m.favoritesCursor < len(m.favorites.Items)-1 {
+				if m.favorites.favorites != nil && m.favoritesCursor < len(m.favorites.favorites.Items)-1 {
 					m.favoritesCursor++
 				}
 			case "enter":
 				// Analyze selected favorite
-				if m.favorites != nil && len(m.favorites.Items) > 0 {
-					repoName := m.favorites.Items[m.favoritesCursor].RepoName
-					m.favorites.UpdateUsage(repoName)
-					m.favorites.Save()
+				if m.favorites.favorites != nil && len(m.favorites.favorites.Items) > 0 {
+					repoName := m.favorites.favorites.Items[m.favoritesCursor].RepoName
+					m.favorites.favorites.UpdateUsage(repoName)
+					m.favorites.favorites.Save()
 					m.input = repoName
 					m.state = stateLoading
 					cmds = append(cmds, m.analyzeRepo(repoName), TickProgressCmd())
 				}
 			case "d":
 				// Remove from favorites
-				if m.favorites != nil && len(m.favorites.Items) > 0 {
-					m.favorites.Remove(m.favorites.Items[m.favoritesCursor].RepoName)
-					m.favorites.Save()
-					if m.favoritesCursor >= len(m.favorites.Items) && m.favoritesCursor > 0 {
+				if m.favorites.favorites != nil && len(m.favorites.favorites.Items) > 0 {
+					m.favorites.favorites.Remove(m.favorites.favorites.Items[m.favoritesCursor].RepoName)
+					m.favorites.favorites.Save()
+					if m.favoritesCursor >= len(m.favorites.favorites.Items) && m.favoritesCursor > 0 {
 						m.favoritesCursor--
 					}
 				}
