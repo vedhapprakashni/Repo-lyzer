@@ -9,8 +9,8 @@ import (
 )
 
 type CompareReposMsg struct {
-	repo1 string
-	repo2 string
+	Repo1 string
+	Repo2 string
 }
 
 type CompareInputModel struct {

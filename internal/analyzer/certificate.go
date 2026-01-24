@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/agnivo988/Repo-lyzer/internal/analyzer/quality"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 )
 
@@ -42,16 +43,8 @@ type CertificateData struct {
 
 // CalculateOverallScore computes a weighted overall score from all metrics
 func CalculateOverallScore(health, maturity, busFactor, commits, contributors int) int {
-	// Normalize scores to 0-100 scale
-	normalizedHealth := float64(health)
-	normalizedMaturity := float64(maturity)
-
-	// Bus factor: higher is better (less risk), so invert if needed
-	// Assuming bus factor is 1-10, higher means more contributors, better
-	normalizedBus := float64(busFactor) * 10 // Scale to 0-100
-
 	// Activity score based on commits and contributors
-	activityScore := 0.0
+	activityScore := 0
 	if commits > 1000 {
 		activityScore = 100
 	} else if commits > 500 {
@@ -78,32 +71,13 @@ func CalculateOverallScore(health, maturity, busFactor, commits, contributors in
 		activityScore = 100
 	}
 
-	// Weighted average: Health 30%, Maturity 25%, Bus Factor 20%, Activity 25%
-	overall := (normalizedHealth*0.3 + normalizedMaturity*0.25 + normalizedBus*0.2 + activityScore*0.25)
-
-	return int(math.Round(overall))
+	// Use shared scoring function with security=100 (not calculated in certificate)
+	return quality.CalculateOverallScore(health, 100, maturity, busFactor, activityScore)
 }
 
 // GetGrade returns a letter grade based on overall score
 func GetGrade(score int) string {
-	switch {
-	case score >= 90:
-		return "A+"
-	case score >= 80:
-		return "A"
-	case score >= 70:
-		return "B+"
-	case score >= 60:
-		return "B"
-	case score >= 50:
-		return "C+"
-	case score >= 40:
-		return "C"
-	case score >= 30:
-		return "D"
-	default:
-		return "F"
-	}
+	return quality.GetGrade(score)
 }
 
 // GetPotentialUses returns a list of potential uses based on the repository's characteristics

@@ -22,18 +22,27 @@ func (m CloneInputModel) Update(msg tea.Msg) (CloneInputModel, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyEnter:
 			if m.input != "" {
-				return m, func() tea.Msg { return CloneRepoMsg{repoName: m.input} }
+				// Validate input format (owner/repo)
+				if strings.Contains(m.input, "/") && len(strings.Split(m.input, "/")) == 2 {
+					m.err = nil
+					return m, func() tea.Msg { return CloneRepoMsg{repoName: m.input} }
+				} else {
+					m.err = fmt.Errorf("invalid format: use owner/repo")
+				}
 			}
 		case tea.KeyBackspace:
 			if len(m.input) > 0 {
 				m.input = m.input[:len(m.input)-1]
+				m.err = nil // Clear error on input change
 			}
 		case tea.KeyRunes:
 			m.input += string(msg.Runes)
+			m.err = nil // Clear error on input change
 		case tea.KeyEsc:
 			return m, func() tea.Msg { return BackToMenuMsg{} }
 		case tea.KeyCtrlU:
 			m.input = ""
+			m.err = nil // Clear error on clear
 		}
 	}
 	return m, nil
