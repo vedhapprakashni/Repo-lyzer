@@ -2,10 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type CompareReposMsg struct {
@@ -43,7 +41,7 @@ func (m CompareInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.step = 1
 			} else if m.step == 1 && m.repo2 != "" {
 				return m, func() tea.Msg {
-					return CompareReposMsg{repo1: m.repo1, repo2: m.repo2}
+					return CompareReposMsg{Repo1: m.repo1, Repo2: m.repo2}
 				}
 			}
 		case "esc":
@@ -75,7 +73,7 @@ func (m CompareInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m CompareInputModel) View(width, height int) string {
+func (m CompareInputModel) View() string {
 	var currentInput string
 	var prompt string
 
@@ -102,15 +100,5 @@ func (m CompareInputModel) View(width, height int) string {
 
 	box := BoxStyle.Render(inputContent)
 
-	if width == 0 {
-		return box
-	}
-
-	return lipgloss.Place(
-		width,
-		height,
-		lipgloss.Center,
-		lipgloss.Center,
-		box,
-	)
+	return box
 }

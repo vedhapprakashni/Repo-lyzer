@@ -2,13 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"os"
-	"strings"
 
-	"github.com/agnivo988/Repo-lyzer/internal/cache"
-	"github.com/agnivo988/Repo-lyzer/internal/config"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type SettingsModel struct {
@@ -119,7 +114,7 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m SettingsModel) View(width, height int) string {
+func (m SettingsModel) View() string {
 	var title string
 	var content string
 
@@ -231,13 +226,5 @@ Select a settings option from the menu.
 
 	box := BoxStyle.Render(settingsContent)
 
-	if width == 0 {
-		return box
-	}
-
-	return lipgloss.Place(
-		width, height,
-		lipgloss.Center, lipgloss.Center,
-		box,
-	)
+	return box
 }

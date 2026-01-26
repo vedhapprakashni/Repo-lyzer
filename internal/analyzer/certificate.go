@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer/quality"
 	"github.com/agnivo988/Repo-lyzer/internal/github"

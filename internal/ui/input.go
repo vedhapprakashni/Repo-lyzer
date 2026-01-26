@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type InputModel struct {
@@ -52,11 +51,7 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m InputModel) View(width, height int) string {
-	if width == 0 || height == 0 {
-		return ""
-	}
-
+func (m InputModel) View() string {
 	inputContent :=
 		TitleStyle.Render("📥 ENTER REPOSITORY") + "\n\n" +
 			InputStyle.Render("> "+m.input) + "\n\n" +
@@ -68,13 +63,7 @@ func (m InputModel) View(width, height int) string {
 
 	box := BoxStyle.Render(inputContent)
 
-	return lipgloss.Place(
-		width,
-		height,
-		lipgloss.Center,
-		lipgloss.Center,
-		box,
-	)
+	return box
 }
 
 func (m *InputModel) SetInput(input string) {
@@ -91,4 +80,23 @@ func (m *InputModel) ClearError() {
 
 func (m *InputModel) SetError(err error) {
 	m.err = err
+}
+
+func sanitizeRepoInput(input string) string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return ""
+	}
+	// Handle GitHub URLs
+	if strings.HasPrefix(input, "https://github.com/") {
+		parts := strings.Split(input, "/")
+		if len(parts) >= 5 {
+			return parts[3] + "/" + parts[4]
+		}
+	}
+	// Handle owner/repo format
+	if strings.Contains(input, "/") && len(strings.Split(input, "/")) == 2 {
+		return input
+	}
+	return ""
 }

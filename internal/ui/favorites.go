@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -17,14 +16,18 @@ type FavoriteItem struct {
 	RepoName  string    `json:"repo_name"`
 	UseCount  int       `json:"use_count"`
 	LastUsed  time.Time `json:"last_used"`
+	AddedAt   time.Time `json:"added_at"`
+	Notes     string    `json:"notes"`
 }
 
 type FavoritesModel struct {
-	Items []FavoriteItem `json:"items"`
+	Items  []FavoriteItem `json:"items"`
+	width  int
+	height int
 }
 
-func NewFavoritesModel() FavoritesModel {
-	return FavoritesModel{
+func NewFavoritesModel() *FavoritesModel {
+	return &FavoritesModel{
 		Items: []FavoriteItem{},
 	}
 }
@@ -44,6 +47,7 @@ func (f *FavoritesModel) Add(repoName string) {
 		RepoName: repoName,
 		UseCount: 1,
 		LastUsed: time.Now(),
+		AddedAt:  time.Now(),
 	})
 }
 
@@ -66,6 +70,29 @@ func (f *FavoritesModel) UpdateUsage(repoName string) {
 	}
 }
 
+func (f *FavoritesModel) IsFavorite(repoName string) bool {
+	for _, item := range f.Items {
+		if item.RepoName == repoName {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *FavoritesModel) GetTopFavorites(limit int) []FavoriteItem {
+	if limit <= 0 {
+		return []FavoriteItem{}
+	}
+	if limit >= len(f.Items) {
+		return f.Items
+	}
+	return f.Items[:limit]
+}
+
+func (f *FavoritesModel) Clear() {
+	f.Items = []FavoriteItem{}
+}
+
 func (f *FavoritesModel) Save() error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -86,7 +113,7 @@ func (f *FavoritesModel) Save() error {
 	return os.WriteFile(filePath, data, 0644)
 }
 
-func LoadFavorites() (FavoritesModel, error) {
+func LoadFavorites() (*FavoritesModel, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return NewFavoritesModel(), err
@@ -111,10 +138,10 @@ func LoadFavorites() (FavoritesModel, error) {
 		return favorites.Items[i].LastUsed.After(favorites.Items[j].LastUsed)
 	})
 
-	return favorites, nil
+	return &favorites, nil
 }
 
-func (f FavoritesModel) View(width, height int) string {
+func (f *FavoritesModel) View() string {
 	header := TitleStyle.Render("⭐ Favorite Repositories")
 
 	if len(f.Items) == 0 {
@@ -125,17 +152,17 @@ func (f FavoritesModel) View(width, height int) string {
 			SubtleStyle.Render("a: add new • q/ESC: back to menu"),
 		)
 
-		if width == 0 {
-			return content
-		}
+	if f.width == 0 {
+		return content
+	}
 
-		return lipgloss.Place(
-			width,
-			height,
-			lipgloss.Center,
-			lipgloss.Center,
-			content,
-		)
+	return lipgloss.Place(
+		f.width,
+		f.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 	}
 
 	// Build favorites list
@@ -171,13 +198,13 @@ func (f FavoritesModel) View(width, height int) string {
 		footer,
 	)
 
-	if width == 0 {
+	if f.width == 0 {
 		return content
 	}
 
 	return lipgloss.Place(
-		width,
-		height,
+		f.width,
+		f.height,
 		lipgloss.Center,
 		lipgloss.Center,
 		content,
