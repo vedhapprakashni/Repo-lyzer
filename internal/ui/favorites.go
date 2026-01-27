@@ -62,15 +62,6 @@ func (f *Favorites) UpdateUsage(repoName string) {
 	}
 }
 
-	// Add new item
-	f.Items = append(f.Items, FavoriteItem{
-		RepoName: repoName,
-		UseCount: 1,
-		LastUsed: time.Now(),
-		AddedAt:  time.Now(),
-	})
-}
-
 func (f *FavoritesModel) Remove(repoName string) {
 	for i, item := range f.Items {
 		if item.RepoName == repoName {
