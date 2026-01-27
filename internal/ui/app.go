@@ -550,7 +550,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg == "switch_to_input" {
 			m.state = stateInput
-			m.input.input = ""
+			m.input = NewInputModel()
 		}
 		if msg == "switch_to_compare" {
 			m.state = stateCompareInput
@@ -1045,11 +1045,11 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tree.Done {
 			if m.tree.SelectedPath != "" {
 				// Initialize file edit model
-				repoName := m.input
+				repoName := m.input.input
 				if m.dashboard.data.Repo != nil && m.dashboard.data.Repo.FullName != "" {
 					repoName = m.dashboard.data.Repo.FullName
 				}
-				m.fileEdit = NewFileEditModel(m.tree.SelectedPath, repoName)
+				m.fileEdit = NewFileEditModel(m.tree.SelectedPath, repoName.input)
 
 				// Check ownership
 				isOwner := m.checkOwnership()
@@ -1116,7 +1116,7 @@ func (m MainModel) View() string {
 func (m MainModel) inputView() string {
 	inputContent :=
 		TitleStyle.Render("📥 ENTER REPOSITORY") + "\n\n" +
-			InputStyle.Render("> "+m.input) + "\n\n" +
+			InputStyle.Render("> "+m.input.input) + "\n\n" +
 			SubtleStyle.Render("Format: owner/repo or GitHub URL  •  Press Enter to analyze")
 
 	if m.err != nil {
@@ -1362,7 +1362,7 @@ func (m MainModel) compareInputView() string {
 }
 
 func (m MainModel) compareResultView() string {
-	if m.compareResult == nil || m.compareResult.Repo1.Repo == nil || m.compareResult.Repo2.Repo == nil {
+	if m.compareResult.result == nil || m.compareResult.result.Repo1.Repo == nil || m.compareResult.result.Repo2.Repo == nil {
 		return "No comparison data"
 	}
 
@@ -1420,10 +1420,10 @@ func (m MainModel) compareResultView() string {
 
 	// Verdict
 	var verdict string
-	if r1.MaturityScore > r2.MaturityScore {
-		verdict = fmt.Sprintf("➡️ %s appears more mature and stable.", r1.Repo.FullName)
-	} else if r2.MaturityScore > r1.MaturityScore {
-		verdict = fmt.Sprintf("➡️ %s appears more mature and stable.", r2.Repo.FullName)
+	if m.compareResult.result.Repo1.MaturityScore > m.compareResult.result.Repo2.MaturityScore {
+		verdict = fmt.Sprintf("➡️ %s appears more mature and stable.", m.compareResult.result.Repo1.Repo.FullName)
+	} else if m.compareResult.result.Repo2.MaturityScore > m.compareResult.result.Repo1.MaturityScore {
+		verdict = fmt.Sprintf("➡️ %s appears more mature and stable.", m.compareResult.result.Repo2.Repo.FullName)
 	} else {
 		verdict = "➡️ Both repositories are similarly mature."
 	}
