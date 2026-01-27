@@ -1,10 +1,10 @@
-# TODO: Fix Compilation Errors in Certificate Output
+# TODO: Fix Go Compilation Errors
 
-## Tasks
-- [x] Change fmt.Printf statements in internal/output/certificate.go to use %s instead of %d for styled string values (Stars, Forks, Open Issues, Commits Last Year, Contributors) - Code already uses %s
-- [x] Verify numeric values are properly converted to strings before styling (already done with fmt.Sprintf)
-- [x] Test compilation with `go build` - Build successful
-- [ ] Test certificate output functionality
+## Errors to Fix
+- [ ] internal/ui/favorites.go: Remove unused import "github.com/charmbracelet/bubbletea"
+- [ ] internal/ui/favorites.go: Add width and height fields to FavoritesModel and use them in View()
+- [ ] internal/ui/compare_input.go: Remove unused imports "strings" and "github.com/charmbracelet/lipgloss"
+- [ ] internal/ui/settings.go: Remove unused import "os"
 
-## Additional Tasks
-- [x] Investigate reported errors in internal/ui/app.go - No compilation errors found, code builds and runs successfully
+## Testing
+- [ ] Run `go build ./...` to verify all errors are resolved
