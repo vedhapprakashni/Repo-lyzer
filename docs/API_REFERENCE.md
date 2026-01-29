@@ -166,6 +166,41 @@ for _, contributor := range contributors {
 }
 ```
 
+### GetContributorsWithAvatars()
+
+Fetches contributors and their avatar URLs for the top N contributors.
+
+**Signature:**
+```go
+func (c *Client) GetContributorsWithAvatars(owner, repo string, topN int) ([]Contributor, error)
+```
+
+**Parameters:**
+- `owner` (string): The repository owner's username
+- `repo` (string): The repository name
+- `topN` (int): Number of top contributors to fetch avatars for
+
+**Returns:**
+- `[]Contributor`: Slice of contributors with their commit counts and avatar URLs
+- `error`: Error if the request fails
+
+**Notes:**
+- Internally calls GetContributors() to fetch all contributors
+- Fetches avatar URLs for the top N contributors using individual user API calls
+- Avatar URLs are populated in the Contributor.AvatarURL field
+- If fewer than topN contributors exist, fetches avatars for all available contributors
+
+**Example:**
+```go
+contributors, err := client.GetContributorsWithAvatars("octocat", "Hello-World", 10)
+if err != nil {
+    log.Fatal(err)
+}
+for _, contributor := range contributors {
+    fmt.Printf("%s: %d commits, Avatar: %s\n", contributor.Login, contributor.Commits, contributor.AvatarURL)
+}
+```
+
 ### GetCommits()
 
 Retrieves commits for a repository within the specified number of days.
