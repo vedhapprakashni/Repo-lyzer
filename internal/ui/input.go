@@ -16,7 +16,11 @@ func NewInputModel() InputModel {
 	return InputModel{}
 }
 
-func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
+func (m InputModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m InputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {

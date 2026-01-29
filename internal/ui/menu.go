@@ -41,6 +41,31 @@ func NewMenuModel() MenuModel {
 	}
 }
 
+// Helper functions for cursor navigation
+func (m *MenuModel) moveCursorUp(choices []string, cursor *int) {
+	if *cursor > 0 {
+		*cursor--
+	} else {
+		*cursor = len(choices) - 1
+	}
+}
+
+func (m *MenuModel) moveCursorDown(choices []string, cursor *int) {
+	if *cursor < len(choices)-1 {
+		*cursor++
+	} else {
+		*cursor = 0
+	}
+}
+
+func (m *MenuModel) moveCursorHome(cursor *int) {
+	*cursor = 0
+}
+
+func (m *MenuModel) moveCursorEnd(choices []string, cursor *int) {
+	*cursor = len(choices) - 1
+}
+
 func (m MenuModel) Init() tea.Cmd { return nil }
 
 func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -53,31 +78,15 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "up", "k", "w", "W":
 			if m.inSubmenu {
-				if m.submenuCursor > 0 {
-					m.submenuCursor--
-				} else {
-					m.submenuCursor = len(m.submenuChoices) - 1
-				}
+				m.moveCursorUp(m.submenuChoices, &m.submenuCursor)
 			} else {
-				if m.cursor > 0 {
-					m.cursor--
-				} else {
-					m.cursor = len(m.choices) - 1
-				}
+				m.moveCursorUp(m.choices, &m.cursor)
 			}
 		case "down", "j", "S":
 			if m.inSubmenu {
-				if m.submenuCursor < len(m.submenuChoices)-1 {
-					m.submenuCursor++
-				} else {
-					m.submenuCursor = 0
-				}
+				m.moveCursorDown(m.submenuChoices, &m.submenuCursor)
 			} else {
-				if m.cursor < len(m.choices)-1 {
-					m.cursor++
-				} else {
-					m.cursor = 0
-				}
+				m.moveCursorDown(m.choices, &m.cursor)
 			}
 		case "home", "g":
 			if m.inSubmenu {
