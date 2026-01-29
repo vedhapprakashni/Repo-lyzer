@@ -121,13 +121,15 @@ func TestFavorites_UpdateUsage(t *testing.T) {
 }
 
 func TestFavorites_GetTopFavorites(t *testing.T) {
-	favs := &FavoritesModel{Items: []FavoriteItem{
-		{RepoName: "repo1"},
-		{RepoName: "repo2"},
-		{RepoName: "repo3"},
-		{RepoName: "repo4"},
-		{RepoName: "repo5"},
-	}}
+	favs := &FavoritesModel{
+		favorites: &Favorites{Items: []FavoriteItem{
+			{RepoName: "repo1"},
+			{RepoName: "repo2"},
+			{RepoName: "repo3"},
+			{RepoName: "repo4"},
+			{RepoName: "repo5"},
+		}},
+	}
 
 	// Get top 3
 	top := favs.GetTopFavorites(3)
