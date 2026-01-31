@@ -16,12 +16,13 @@ import (
 
 // MonitorState represents the current state of a monitored repository
 type MonitorState struct {
-	Owner         string    `json:"owner"`
-	Repo          string    `json:"repo"`
-	LastCommitSHA string    `json:"last_commit_sha"`
-	LastIssueID   int       `json:"last_issue_id"`
-	LastPRID      int       `json:"last_pr_id"`
-	LastUpdated   time.Time `json:"last_updated"`
+	Owner               string    `json:"owner"`
+	Repo                string    `json:"repo"`
+	LastCommitSHA       string    `json:"last_commit_sha"`
+	LastIssueID         int       `json:"last_issue_id"`
+	LastPRID            int       `json:"last_pr_id"`
+	LastContributorCount int      `json:"last_contributor_count"`
+	LastUpdated         time.Time `json:"last_updated"`
 }
 
 // Monitor manages real-time monitoring of a GitHub repository
@@ -181,9 +182,8 @@ func (m *Monitor) checkIssues() {
 		return
 	}
 
-	// For now, just check if there are any open issues
-	// In a full implementation, we'd track individual issues
-	if len(issues) > 0 {
+	// Check if the number of issues has changed
+	if len(issues) != m.state.LastIssueID {
 		notification := Notification{
 			Type:      "issue",
 			Title:     "Issues Update",
@@ -192,6 +192,7 @@ func (m *Monitor) checkIssues() {
 			Severity:  "info",
 		}
 		m.notifications <- notification
+		m.state.LastIssueID = len(issues)
 	}
 }
 
@@ -226,9 +227,8 @@ func (m *Monitor) checkContributors() {
 		return
 	}
 
-	// For now, just check if contributor count changed
-	// In a full implementation, we'd track individual contributors
-	if len(contributors) > 0 {
+	// Check if the contributor count has changed
+	if len(contributors) != m.state.LastContributorCount {
 		notification := Notification{
 			Type:      "contributor",
 			Title:     "Contributor Update",
@@ -237,6 +237,7 @@ func (m *Monitor) checkContributors() {
 			Severity:  "info",
 		}
 		m.notifications <- notification
+		m.state.LastContributorCount = len(contributors)
 	}
 }
 
@@ -270,7 +271,7 @@ func (m *Monitor) loadState() {
 	defer m.stateMutex.Unlock()
 
 	key := fmt.Sprintf("%s/%s", m.owner, m.repo)
-	if entry, found := m.cache.Get(key); found {
+	if _, found := m.cache.Get(key); found {
 		// In a full implementation, we'd deserialize the state
 		// For now, just initialize with current time
 		m.state.LastUpdated = time.Now()
