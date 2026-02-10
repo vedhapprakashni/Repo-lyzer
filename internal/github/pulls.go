@@ -128,3 +128,21 @@ func (c *Client) GetPullRequestReviews(owner, repo string, prNumber int) ([]Revi
 
 	return reviews, nil
 }
+
+// GetPullRequestDetails fetches detailed information for a specific PR
+// This endpoint includes additions, deletions, and changed_files which are
+// not available in the list endpoint
+func (c *Client) GetPullRequestDetails(owner, repo string, prNumber int) (*PullRequest, error) {
+	url := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/pulls/%d",
+		owner, repo, prNumber,
+	)
+
+	var pr PullRequest
+	err := c.get(url, &pr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pr, nil
+}

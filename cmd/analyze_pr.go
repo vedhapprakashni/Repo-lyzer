@@ -20,10 +20,14 @@ var analyzePRCmd = &cobra.Command{
   • Abandoned PR ratio
   • First-time contributor friendliness
 
+Note: Each PR requires 2 API calls (details + reviews). With authentication,
+you have 5,000 requests/hour. Default limit is 100 PRs (200 requests).
+Use --limit 0 for no limit, but be cautious of rate limits.
+
 Examples:
   repo-lyzer analyze-pr golang/go
-  repo-lyzer analyze-pr microsoft/vscode --state closed
-  repo-lyzer analyze-pr octocat/Hello-World --limit 50 --json`,
+  repo-lyzer analyze-pr microsoft/vscode --state closed --limit 50
+  repo-lyzer analyze-pr octocat/Hello-World --json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		state, _ := cmd.Flags().GetString("state")
@@ -67,30 +71,91 @@ Examples:
 
 		if !jsonOutput {
 			fmt.Printf("✓ Found %d pull requests\n", len(prs))
-			fmt.Printf("🔍 Fetching reviews for pull requests...\n")
+			fmt.Printf("🔍 Fetching PR details and reviews concurrently...\n")
 		}
 
-		// Fetch reviews for each PR
-		reviews := make(map[int][]github.Review)
+		// Fetch PR details and reviews concurrently with worker pool
+		type prResult struct {
+			pr      *github.PullRequest
+			reviews []github.Review
+			index   int
+			err     error
+		}
+
+		workers := 10 // Concurrent workers
+		semaphore := make(chan struct{}, workers)
+		results := make(chan prResult, len(prs))
+
+		// Launch goroutines for each PR
 		for i, pr := range prs {
-			if !jsonOutput && i%10 == 0 {
-				fmt.Printf("Progress: %d/%d PRs analyzed\r", i, len(prs))
+			go func(prNumber, index int) {
+				semaphore <- struct{}{}        // Acquire
+				defer func() { <-semaphore }() // Release
+
+				// Fetch detailed PR info (includes additions, deletions, changed_files)
+				prDetails, err := client.GetPullRequestDetails(owner, repo, prNumber)
+				if err != nil {
+					results <- prResult{index: index, err: fmt.Errorf("PR #%d details: %w", prNumber, err)}
+					return
+				}
+
+				// Fetch reviews
+				prReviews, err := client.GetPullRequestReviews(owner, repo, prNumber)
+				if err != nil {
+					results <- prResult{index: index, err: fmt.Errorf("PR #%d reviews: %w", prNumber, err)}
+					return
+				}
+
+				results <- prResult{
+					pr:      prDetails,
+					reviews: prReviews,
+					index:   index,
+				}
+			}(pr.Number, i)
+		}
+
+		// Collect results
+		updatedPRs := make([]*github.PullRequest, len(prs))
+		reviews := make(map[int][]github.Review)
+		errorCount := 0
+
+		for i := 0; i < len(prs); i++ {
+			result := <-results
+
+			if !jsonOutput && (i+1)%10 == 0 {
+				fmt.Printf("Progress: %d/%d PRs fetched\r", i+1, len(prs))
 			}
 
-			prReviews, err := client.GetPullRequestReviews(owner, repo, pr.Number)
-			if err != nil {
-				// Log error but continue with other PRs
+			if result.err != nil {
+				errorCount++
 				if !jsonOutput {
-					fmt.Printf("⚠️  Warning: failed to fetch reviews for PR #%d: %v\n", pr.Number, err)
+					fmt.Printf("⚠️  Warning: %v                                  \n", result.err)
 				}
 				continue
 			}
-			reviews[pr.Number] = prReviews
+
+			updatedPRs[result.index] = result.pr
+			reviews[result.pr.Number] = result.reviews
+		}
+
+		// Filter out nil entries (failed fetches)
+		var finalPRs []github.PullRequest
+		for _, pr := range updatedPRs {
+			if pr != nil {
+				finalPRs = append(finalPRs, *pr)
+			}
 		}
 
 		if !jsonOutput {
-			fmt.Printf("✓ Completed fetching reviews                    \n\n")
+			fmt.Printf("✓ Completed fetching %d PRs (%d errors)                    \n\n", len(finalPRs), errorCount)
 		}
+
+		if len(finalPRs) == 0 {
+			return fmt.Errorf("no PRs could be fetched successfully")
+		}
+
+		// Use finalPRs instead of prs
+		prs = finalPRs
 
 		// Analyze pull requests
 		analytics := analyzer.AnalyzePullRequests(prs, reviews)
@@ -117,6 +182,6 @@ Examples:
 func init() {
 	rootCmd.AddCommand(analyzePRCmd)
 	analyzePRCmd.Flags().String("state", "all", "Filter PRs by state: open, closed, or all")
-	analyzePRCmd.Flags().Int("limit", 0, "Limit number of PRs to analyze (0 = no limit)")
+	analyzePRCmd.Flags().Int("limit", 100, "Limit number of PRs to analyze (0 = no limit, use with caution)")
 	analyzePRCmd.Flags().Bool("json", false, "Output results as JSON")
 }

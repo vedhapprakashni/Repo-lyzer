@@ -207,6 +207,7 @@ func TestAnalyzePullRequests_PRSizeDistribution(t *testing.T) {
 func TestAnalyzePullRequests_FirstTimeContributors(t *testing.T) {
 	now := time.Now()
 	merged := now.Add(-24 * time.Hour)
+	closed := now.Add(-68 * time.Hour) // Add closed timestamp
 
 	prs := []github.PullRequest{
 		// user1 has only one PR (first-time, accepted)
@@ -214,8 +215,8 @@ func TestAnalyzePullRequests_FirstTimeContributors(t *testing.T) {
 		// user2 has two PRs (not first-time)
 		{Number: 2, State: "closed", CreatedAt: now.Add(-90 * time.Hour), MergedAt: &merged, User: github.User{Login: "user2"}},
 		{Number: 3, State: "closed", CreatedAt: now.Add(-85 * time.Hour), MergedAt: &merged, User: github.User{Login: "user2"}},
-		// user3 has only one PR (first-time, not accepted)
-		{Number: 4, State: "closed", CreatedAt: now.Add(-70 * time.Hour), User: github.User{Login: "user3"}},
+		// user3 has only one PR (first-time, not accepted) - FIX: Add ClosedAt
+		{Number: 4, State: "closed", CreatedAt: now.Add(-70 * time.Hour), ClosedAt: &closed, User: github.User{Login: "user3"}},
 	}
 
 	firstReview := now.Add(-70 * time.Hour)
