@@ -114,19 +114,41 @@ func (c *Client) GetPullRequestsWithLimit(owner, repo, state string, limit int) 
 }
 
 // GetPullRequestReviews fetches all reviews for a specific pull request
+// Handles pagination to retrieve all reviews (GitHub default is 30 per page)
 func (c *Client) GetPullRequestReviews(owner, repo string, prNumber int) ([]Review, error) {
-	url := fmt.Sprintf(
-		"https://api.github.com/repos/%s/%s/pulls/%d/reviews",
-		owner, repo, prNumber,
-	)
+	var allReviews []Review
 
-	var reviews []Review
-	err := c.get(url, &reviews)
-	if err != nil {
-		return nil, err
+	page := 1
+	perPage := 100
+
+	for {
+		url := fmt.Sprintf(
+			"https://api.github.com/repos/%s/%s/pulls/%d/reviews?per_page=%d&page=%d",
+			owner, repo, prNumber, perPage, page,
+		)
+
+		var reviews []Review
+		err := c.get(url, &reviews)
+		if err != nil {
+			return nil, err
+		}
+
+		// Stop when no more reviews
+		if len(reviews) == 0 {
+			break
+		}
+
+		allReviews = append(allReviews, reviews...)
+
+		// Stop when fewer than per_page (last page)
+		if len(reviews) < perPage {
+			break
+		}
+
+		page++
 	}
 
-	return reviews, nil
+	return allReviews, nil
 }
 
 // GetPullRequestDetails fetches detailed information for a specific PR
