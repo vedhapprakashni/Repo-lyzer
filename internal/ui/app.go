@@ -37,6 +37,8 @@ const (
 	stateCompareResult
 	stateCloneInput
 	stateCloning
+	stateNotifications
+	stateMonitorDashboard
 )
 
 // Message types for sub-models
@@ -64,18 +66,20 @@ type MainModel struct {
 	state sessionState
 
 	// Sub-models for different UI states
-	menu           MenuModel
-	input          InputModel
-	loading        LoadingModel
-	compareInput   CompareInputModel
-	compareLoading CompareLoadingModel
-	compareResult  CompareResultModel
-	settings       SettingsModel
-	help           HelpModel
-	history        HistoryModel
-	favorites      *FavoritesModel
-	cloneInput     CloneInputModel
-	cloning        CloningModel
+	menu             MenuModel
+	input            InputModel
+	loading          LoadingModel
+	compareInput     CompareInputModel
+	compareLoading   CompareLoadingModel
+	compareResult    CompareResultModel
+	settings         SettingsModel
+	help             HelpModel
+	history          HistoryModel
+	favorites        *FavoritesModel
+	cloneInput       CloneInputModel
+	cloning          CloningModel
+	notifications    NotificationsModel
+	monitorDashboard MonitorDashboardModel
 
 	// Shared models
 	dashboard DashboardModel
@@ -126,6 +130,7 @@ func NewMainModel(cache *cache.Cache, config *config.AppSettings) MainModel {
 		favorites:      NewFavoritesModel(),
 		cloneInput:     NewCloneInputModel(),
 		cloning:        NewCloningModel(),
+		notifications:  NewNotificationsModel(),
 		dashboard:      NewDashboardModel(),
 		tree:           NewTreeModel(nil),
 		cache:          cache,
@@ -185,11 +190,13 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateHistory
 			case 4: // Clone Repository
 				m.state = stateCloneInput
-			case 5: // Settings
+			case 5: // Monitor Repository
+				m.state = stateNotifications
+			case 6: // Settings
 				m.state = stateSettings
-			case 6: // Help
+			case 7: // Help
 				m.state = stateHelp
-			case 7: // Exit
+			case 8: // Exit
 				return m, tea.Quit
 			}
 			m.menu.Done = false
@@ -573,6 +580,40 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case stateNotifications:
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "q", "esc":
+				m.state = stateMenu
+			default:
+				newNotifications, cmd := m.notifications.Update(msg)
+				m.notifications = newNotifications.(NotificationsModel)
+				cmds = append(cmds, cmd)
+			}
+		default:
+			newNotifications, cmd := m.notifications.Update(msg)
+			m.notifications = newNotifications.(NotificationsModel)
+			cmds = append(cmds, cmd)
+		}
+
+	case stateMonitorDashboard:
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "q", "esc":
+				m.state = stateMenu
+			default:
+				newMonitor, cmd := m.monitorDashboard.Update(msg)
+				m.monitorDashboard = newMonitor.(MonitorDashboardModel)
+				cmds = append(cmds, cmd)
+			}
+		default:
+			newMonitor, cmd := m.monitorDashboard.Update(msg)
+			m.monitorDashboard = newMonitor.(MonitorDashboardModel)
+			cmds = append(cmds, cmd)
+		}
+
 	case stateDashboard:
 		if key, ok := msg.(tea.KeyMsg); ok {
 			if key.String() == "." {
@@ -661,6 +702,10 @@ func (m MainModel) View() string {
 		return m.cloneInput.View(m.windowWidth, m.windowHeight)
 	case stateCloning:
 		return m.cloning.View(m.windowWidth, m.windowHeight)
+	case stateNotifications:
+		return m.notifications.View()
+	case stateMonitorDashboard:
+		return m.monitorDashboard.View()
 	case stateDashboard:
 		return m.dashboard.View()
 	case stateTree:
@@ -867,6 +912,9 @@ func (m MainModel) analyzeRepo(repoName string) tea.Cmd {
 		if m.cache != nil {
 			m.cache.Set(repoName, result)
 		}
+
+		// Add success notification
+		AddAnalysisNotification(repoName, true)
 
 		return result
 	}
@@ -1102,4 +1150,15 @@ func Run(cache *cache.Cache, config *config.AppSettings) error {
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
+}
+
+// SetStateNotifications sets the initial state to notifications view
+func (m *MainModel) SetStateNotifications() {
+	m.state = stateNotifications
+}
+
+// SetStateMonitorDashboard sets the initial state to monitor dashboard
+func (m *MainModel) SetStateMonitorDashboard(owner, repo string, interval time.Duration) {
+	m.state = stateMonitorDashboard
+	m.monitorDashboard = NewMonitorDashboardModel(owner, repo, interval)
 }

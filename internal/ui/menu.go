@@ -147,6 +147,11 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.enterSubmenu()
 			}
+		case "f":
+			if !m.inSubmenu {
+				m.cursor = 1 // Favorites
+				m.enterSubmenu()
+			}
 		case "c":
 			if !m.inSubmenu {
 				m.cursor = 2
@@ -156,6 +161,11 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Quick access: History
 			if !m.inSubmenu {
 				m.cursor = 3
+				m.enterSubmenu()
+			}
+		case "d":
+			if !m.inSubmenu {
+				m.cursor = 4 // Clone
 				m.enterSubmenu()
 			}
 		case "m":
@@ -196,7 +206,10 @@ func (m *MenuModel) enterSubmenu() {
 	case 4: // Clone Repository
 		m.SelectedOption = 4
 		m.Done = true
-	case 5: // Settings
+	case 5: // Monitor Repository
+		m.SelectedOption = 5
+		m.Done = true
+	case 6: // Settings
 		m.submenuType = "settings"
 		m.submenuChoices = []string{
 			"Theme Settings",
@@ -207,7 +220,7 @@ func (m *MenuModel) enterSubmenu() {
 		}
 		m.inSubmenu = true
 		m.submenuCursor = 0
-	case 6: // Help
+	case 7: // Help
 		m.submenuType = "help"
 		m.submenuChoices = []string{
 			"Keyboard Shortcuts",
@@ -217,8 +230,8 @@ func (m *MenuModel) enterSubmenu() {
 		}
 		m.inSubmenu = true
 		m.submenuCursor = 0
-	case 7: // Exit
-		m.SelectedOption = 7
+	case 8: // Exit
+		m.SelectedOption = 8
 		m.Done = true
 	}
 }
@@ -239,7 +252,7 @@ func (m MenuModel) View() string {
 	}
 
 	// Menu items with keyboard shortcuts
-	shortcuts := []string{"a", "c", "h", "d", "s", "?", "q"}
+	shortcuts := []string{"a", "f", "c", "h", "d", "m", "s", "?", "q"}
 
 	var menuItems []string
 

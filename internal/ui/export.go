@@ -506,28 +506,41 @@ func ExportHTML(data AnalysisResult, _ string) (string, error) {
 func ExportAnalysis(data AnalysisResult, format string) (string, error) {
 	// Validate the export format
 	if err := ValidateExportFormat(format); err != nil {
+		AddExportNotification(data.Repo.FullName, format, false)
 		return "", err
 	}
 
 	// Convert format to lowercase for consistency
 	format = strings.ToLower(format)
 
+	var filePath string
+	var err error
+
 	// Call the appropriate export function based on format
 	switch format {
 	case "json":
-		return ExportJSON(data, "")
+		filePath, err = ExportJSON(data, "")
 	case "markdown":
-		return ExportMarkdown(data, "")
+		filePath, err = ExportMarkdown(data, "")
 	case "csv":
-		return ExportCSV(data, "")
+		filePath, err = ExportCSV(data, "")
 	case "html":
-		return ExportHTML(data, "")
+		filePath, err = ExportHTML(data, "")
 	case "pdf":
-		return ExportPDF(data, "")
+		filePath, err = ExportPDF(data, "")
 	default:
 		// This should not happen due to validation, but just in case
-		return "", fmt.Errorf("unexpected format after validation: %s", format)
+		err = fmt.Errorf("unexpected format after validation: %s", format)
 	}
+
+	// Add notification based on result
+	if err != nil {
+		AddExportNotification(data.Repo.FullName, format, false)
+	} else {
+		AddExportNotification(data.Repo.FullName, format, true)
+	}
+
+	return filePath, err
 }
 
 // CompareExportData is the structure for comparison JSON export
