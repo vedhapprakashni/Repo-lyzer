@@ -109,6 +109,7 @@ type MainModel struct {
 	repoInput       string
 	progress        *ProgressTracker
 	cacheStatus     string
+	initialCmd      tea.Cmd
 }
 
 // NewMainModel creates a new MainModel with initialized sub-models
@@ -141,7 +142,7 @@ func NewMainModel(cache *cache.Cache, config *config.AppSettings) MainModel {
 
 // Init initializes the Bubble Tea program
 func (m MainModel) Init() tea.Cmd {
-	return nil
+	return m.initialCmd
 }
 
 // Update handles messages and updates the model
@@ -190,13 +191,15 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateHistory
 			case 4: // Clone Repository
 				m.state = stateCloneInput
-			case 5: // Monitor Repository
+			case 5: // Notifications
 				m.state = stateNotifications
-			case 6: // Settings
+			case 6: // Monitoring
+				m.state = stateMonitorDashboard
+			case 7: // Settings
 				m.state = stateSettings
-			case 7: // Help
+			case 8: // Help
 				m.state = stateHelp
-			case 8: // Exit
+			case 9: // Exit
 				return m, tea.Quit
 			}
 			m.menu.Done = false
@@ -602,6 +605,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "q", "esc":
+				m.monitorDashboard.StopMonitoring()
 				m.state = stateMenu
 			default:
 				newMonitor, cmd := m.monitorDashboard.Update(msg)
@@ -1161,4 +1165,5 @@ func (m *MainModel) SetStateNotifications() {
 func (m *MainModel) SetStateMonitorDashboard(owner, repo string, interval time.Duration) {
 	m.state = stateMonitorDashboard
 	m.monitorDashboard = NewMonitorDashboardModel(owner, repo, interval)
+	m.initialCmd = m.monitorDashboard.Init()
 }

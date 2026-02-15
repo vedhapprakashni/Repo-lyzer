@@ -38,6 +38,7 @@ type Monitor struct {
 	cancel       context.CancelFunc
 	wg           sync.WaitGroup
 	notifications chan Notification
+	startOnce    sync.Once
 }
 
 // Notification represents a monitoring notification
@@ -74,15 +75,11 @@ func NewMonitor(owner, repo string, interval time.Duration) (*Monitor, error) {
 
 // Start begins the monitoring process
 func (m *Monitor) Start() error {
-	// Load previous state
-	m.loadState()
+	// Start monitoring loop (non-blocking setup)
+	m.StartAsync()
 
-	// Start notification handler
+	// Start CLI notification handler
 	go m.handleNotifications()
-
-	// Start monitoring loop
-	m.wg.Add(1)
-	go m.monitorLoop()
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
@@ -100,15 +97,29 @@ func (m *Monitor) Start() error {
 	return nil
 }
 
+// StartAsync begins monitoring without waiting for OS signals.
+func (m *Monitor) StartAsync() {
+	m.startOnce.Do(func() {
+		m.loadState()
+		m.wg.Add(1)
+		go m.monitorLoop()
+	})
+}
+
+// Notifications exposes monitoring notifications as a read-only channel.
+func (m *Monitor) Notifications() <-chan Notification {
+	return m.notifications
+}
+
 // Stop stops the monitoring process
 func (m *Monitor) Stop() {
 	m.cancel()
-	close(m.notifications)
 }
 
 // monitorLoop runs the main monitoring loop
 func (m *Monitor) monitorLoop() {
 	defer m.wg.Done()
+	defer close(m.notifications)
 
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()

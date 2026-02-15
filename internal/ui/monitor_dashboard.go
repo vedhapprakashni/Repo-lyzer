@@ -24,6 +24,7 @@ type MonitorDashboardModel struct {
 	err           error
 	scrollOffset  int
 	autoScroll    bool
+	monitorRunID  int
 }
 
 // NewMonitorDashboardModel creates a new monitor dashboard model
@@ -35,12 +36,14 @@ func NewMonitorDashboardModel(owner, repo string, interval time.Duration) Monito
 		interval:     interval,
 		notifications: []monitor.Notification{},
 		autoScroll:   true,
+		monitorRunID: 1,
 	}
 }
 
 // MonitorUpdateMsg carries monitoring updates
 type MonitorUpdateMsg struct {
 	notification monitor.Notification
+	runID        int
 }
 
 // MonitorErrorMsg carries monitoring errors
@@ -48,32 +51,52 @@ type MonitorErrorMsg struct {
 	err error
 }
 
-func (m MonitorDashboardModel) Init() tea.Cmd {
-	return m.startMonitoring()
+type monitorStartedMsg struct {
+	monitor *monitor.Monitor
+	runID   int
 }
 
-func (m MonitorDashboardModel) startMonitoring() tea.Cmd {
+type monitorStoppedMsg struct {
+	runID int
+}
+
+func (m MonitorDashboardModel) Init() tea.Cmd {
+	return m.startMonitoring(m.monitorRunID)
+}
+
+func (m MonitorDashboardModel) startMonitoring(runID int) tea.Cmd {
 	return func() tea.Msg {
 		mon, err := monitor.NewMonitor(m.owner, m.repo, m.interval)
 		if err != nil {
 			return MonitorErrorMsg{err: err}
 		}
-		
-		// Start monitoring in background
-		go func() {
-			mon.Start()
-		}()
-		
-		return MonitorUpdateMsg{
-			notification: monitor.Notification{
-				Type:      "info",
-				Title:     "Monitoring Started",
-				Message:   fmt.Sprintf("Monitoring %s every %v", m.repoName, m.interval),
-				Timestamp: time.Now(),
-				Severity:  "info",
-			},
+
+		return monitorStartedMsg{
+			monitor: mon,
+			runID:   runID,
 		}
 	}
+}
+
+func waitMonitorUpdate(mon *monitor.Monitor, runID int) tea.Cmd {
+	return func() tea.Msg {
+		notification, ok := <-mon.Notifications()
+		if !ok {
+			return monitorStoppedMsg{runID: runID}
+		}
+		return MonitorUpdateMsg{
+			notification: notification,
+			runID:        runID,
+		}
+	}
+}
+
+func (m *MonitorDashboardModel) StopMonitoring() {
+	if m.monitor != nil {
+		m.monitor.Stop()
+		m.monitor = nil
+	}
+	m.isMonitoring = false
 }
 
 func (m MonitorDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -82,7 +105,37 @@ func (m MonitorDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+	case monitorStartedMsg:
+		if msg.runID != m.monitorRunID {
+			msg.monitor.Stop()
+			return m, nil
+		}
+		if m.monitor != nil {
+			m.monitor.Stop()
+		}
+		m.monitor = msg.monitor
+		m.monitor.StartAsync()
+		m.isMonitoring = true
+		m.err = nil
+
+		m.notifications = append([]monitor.Notification{{
+			Type:      "info",
+			Title:     "Monitoring Started",
+			Message:   fmt.Sprintf("Monitoring %s every %v", m.repoName, m.interval),
+			Timestamp: time.Now(),
+			Severity:  "info",
+		}}, m.notifications...)
+
+		if len(m.notifications) > 50 {
+			m.notifications = m.notifications[:50]
+		}
+
+		return m, waitMonitorUpdate(m.monitor, m.monitorRunID)
+
 	case MonitorUpdateMsg:
+		if msg.runID != m.monitorRunID {
+			return m, nil
+		}
 		m.notifications = append([]monitor.Notification{msg.notification}, m.notifications...)
 		
 		// Keep only last 50 notifications
@@ -98,6 +151,14 @@ func (m MonitorDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scrollOffset = 0
 		}
 
+		return m, waitMonitorUpdate(m.monitor, m.monitorRunID)
+
+	case monitorStoppedMsg:
+		if msg.runID != m.monitorRunID {
+			return m, nil
+		}
+		m.isMonitoring = false
+
 	case MonitorErrorMsg:
 		m.err = msg.err
 		m.isMonitoring = false
@@ -105,6 +166,9 @@ func (m MonitorDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		maxNotifications := len(m.notifications)
 		visibleLines := m.height - 12
+		if visibleLines < 1 {
+			visibleLines = 1
+		}
 
 		switch msg.String() {
 		case "up", "k":
@@ -124,12 +188,15 @@ func (m MonitorDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.autoScroll = !m.autoScroll
 		case "r":
 			// Refresh/restart monitoring
-			return m, m.startMonitoring()
+			m.StopMonitoring()
+			m.monitorRunID++
+			return m, m.startMonitoring(m.monitorRunID)
 		case "c":
 			// Clear notifications
 			m.notifications = []monitor.Notification{}
 			m.scrollOffset = 0
 		}
+
 	}
 
 	return m, nil

@@ -81,8 +81,10 @@ func (m NotificationsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.scrollOffset = 0
 		case "end", "G":
-			m.cursor = maxEntries - 1
-			m.scrollOffset = maxInt(0, maxEntries-visibleLines)
+			if maxEntries > 0 {
+				m.cursor = maxEntries - 1
+				m.scrollOffset = maxInt(0, maxEntries-visibleLines)
+			}
 		case "d":
 			// Delete selected notification
 			if maxEntries > 0 {

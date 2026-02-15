@@ -33,7 +33,8 @@ func NewMenuModel() MenuModel {
 			"🔄 Compare Repositories",
 			"📜 View History",
 			"📥 Clone Repository",
-			"👀 Monitor Repository",
+			"🔔 Notifications",
+			"👀 Monitoring",
 			"⚙️ Settings",
 			"❓ Help",
 			"🚪 Exit",
@@ -101,7 +102,7 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.cursor = len(m.choices) - 1
 			}
-		case "1", "2", "3", "4", "5", "6", "7":
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 			idx := int(msg.String()[0] - '1')
 			if !m.inSubmenu && idx < len(m.choices) {
 				m.cursor = idx
@@ -129,7 +130,7 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "q":
 			if !m.inSubmenu {
-				m.SelectedOption = 8 // Exit
+				m.SelectedOption = 9
 				m.Done = true
 			} else {
 				m.inSubmenu = false
@@ -139,7 +140,7 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "?":
 			if !m.inSubmenu {
-				m.cursor = 7 // Help
+				m.cursor = 8
 				m.enterSubmenu()
 			}
 		case "a":
@@ -168,14 +169,19 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 4 // Clone
 				m.enterSubmenu()
 			}
+		case "n":
+			if !m.inSubmenu {
+				m.cursor = 5 // Notification
+				m.enterSubmenu()
+			}
 		case "m":
 			if !m.inSubmenu {
-				m.cursor = 5 // Monitor
+				m.cursor = 6 // Monitor
 				m.enterSubmenu()
 			}
 		case "s":
 			if !m.inSubmenu {
-				m.cursor = 6
+				m.cursor = 7 //Setting
 				m.enterSubmenu()
 			}
 		}
@@ -206,10 +212,13 @@ func (m *MenuModel) enterSubmenu() {
 	case 4: // Clone Repository
 		m.SelectedOption = 4
 		m.Done = true
-	case 5: // Monitor Repository
+	case 5: // Notification
 		m.SelectedOption = 5
 		m.Done = true
-	case 6: // Settings
+	case 6: // Monitoring
+		m.SelectedOption = 6
+		m.Done = true
+	case 7: // Settings
 		m.submenuType = "settings"
 		m.submenuChoices = []string{
 			"Theme Settings",
@@ -220,7 +229,7 @@ func (m *MenuModel) enterSubmenu() {
 		}
 		m.inSubmenu = true
 		m.submenuCursor = 0
-	case 7: // Help
+	case 8: // Help
 		m.submenuType = "help"
 		m.submenuChoices = []string{
 			"Keyboard Shortcuts",
@@ -230,8 +239,8 @@ func (m *MenuModel) enterSubmenu() {
 		}
 		m.inSubmenu = true
 		m.submenuCursor = 0
-	case 8: // Exit
-		m.SelectedOption = 8
+	case 9: // Exit
+		m.SelectedOption = 9
 		m.Done = true
 	}
 }
@@ -250,10 +259,8 @@ func (m MenuModel) View() string {
 	if m.inSubmenu {
 		return m.submenuView(logoView)
 	}
-
-	// Menu items with keyboard shortcuts
-	shortcuts := []string{"a", "f", "c", "h", "d", "m", "s", "?", "q"}
-
+// Menu items with keyboard shortcuts
+	shortcuts := []string{"a", "f", "c", "h", "d", "n", "m", "s", "?", "q"}
 	var menuItems []string
 
 	for i, choice := range m.choices {
