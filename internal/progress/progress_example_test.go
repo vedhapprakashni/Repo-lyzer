@@ -21,18 +21,18 @@ func TestOverallProgress(t *testing.T) {
 
 	for i, step := range steps {
 		progress.StartStep(step)
-		
+
 		// Simulate work
 		time.Sleep(100 * time.Millisecond)
-		
+
 		progress.CompleteStep(step)
-		
+
 		// Verify progress
 		completed, total, percentage := progress.GetProgress()
 		if completed != i+1 || total != 5 {
 			t.Errorf("Step %d: expected %d/%d, got %d/%d", i, i+1, 5, completed, total)
 		}
-		
+
 		expectedPercentage := ((i + 1) * 100) / 5
 		if percentage != expectedPercentage {
 			t.Errorf("Step %d: expected %d%% progress, got %d%%", i, expectedPercentage, percentage)
