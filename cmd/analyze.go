@@ -12,6 +12,7 @@ import (
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 	"github.com/agnivo988/Repo-lyzer/internal/output"
+	"github.com/agnivo988/Repo-lyzer/internal/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -163,9 +164,14 @@ var analyzeCmd = &cobra.Command{
 		// Initialize GitHub client
 		client := github.NewClient()
 
+		// Create progress spinner
+		spinner := progress.NewSpinner()
+
 		// Fetch repository information
+		spinner.Start(fmt.Sprintf("🔍 Fetching repository information for %s/%s...", owner, repo))
 		repoInfo, err := client.GetRepo(owner, repo)
 		if err != nil {
+			spinner.Stop()
 			// Check if it's a private repo error and no token is set
 			if strings.Contains(err.Error(), "repository not found") && !client.HasToken() {
 				fmt.Print("This appears to be a private repository. Please enter your GitHub access token: ")
@@ -175,7 +181,9 @@ var analyzeCmd = &cobra.Command{
 					if token != "" {
 						client.SetToken(token)
 						// Retry fetching the repo with the token
+						spinner.Start(fmt.Sprintf("🔍 Fetching repository information for %s/%s...", owner, repo))
 						repoInfo, err = client.GetRepo(owner, repo)
+						spinner.Stop()
 						if err != nil {
 							return fmt.Errorf("failed to access repository even with token: %w", err)
 						}
@@ -189,38 +197,56 @@ var analyzeCmd = &cobra.Command{
 				return err
 			}
 		}
+		spinner.StopWithMessage("Repository information fetched")
 
 		// Fetch programming languages used in the repository
+		spinner.Start("📚 Fetching programming languages...")
 		langs, err := client.GetLanguages(owner, repo)
 		if err != nil {
+			spinner.Stop()
 			return fmt.Errorf("failed to get languages: %w", err)
 		}
+		spinner.StopWithMessage("Languages fetched")
 
 		// Fetch commits from the last 365 days
+		spinner.Start("📝 Analyzing commit history (last 365 days)...")
 		commits, err := client.GetCommits(owner, repo, 365)
 		if err != nil {
+			spinner.Stop()
 			return fmt.Errorf("failed to get commits: %w", err)
 		}
+		spinner.StopWithMessage(fmt.Sprintf("Commit history analyzed (%d commits)", len(commits)))
 
 		// Fetch file tree for hotspot analysis
+		spinner.Start("📁 Scanning repository file structure...")
 		fileTree, err := client.GetFileTree(owner, repo, repoInfo.DefaultBranch)
 		if err != nil {
+			spinner.Stop()
 			return fmt.Errorf("failed to get file tree: %w", err)
 		}
+		spinner.StopWithMessage("File structure scanned")
 
 		// Calculate repository health score
+		spinner.Start("💪 Computing repository health score...")
 		score := analyzer.CalculateHealth(repoInfo, commits)
+		spinner.StopWithMessage("Health score computed")
 
 		// Fetch contributors
+		spinner.Start("👥 Fetching contributor information...")
 		contributors, err := client.GetContributorsWithAvatars(owner, repo, 15)
 		if err != nil {
+			spinner.Stop()
 			return err
 		}
+		spinner.StopWithMessage(fmt.Sprintf("Contributors fetched (%d contributors)", len(contributors)))
 
 		// Calculate bus factor and risk level
+		spinner.Start("⚠️  Analyzing bus factor and risk...")
 		busFactor, busRisk := analyzer.BusFactor(contributors)
+		spinner.StopWithMessage("Bus factor analysis complete")
 
 		// Calculate repository maturity score and level
+		spinner.Start("📈 Calculating repository maturity...")
 		maturityScore, maturityLevel :=
 			analyzer.RepoMaturityScore(
 				repoInfo,
@@ -228,6 +254,7 @@ var analyzeCmd = &cobra.Command{
 				len(contributors),
 				false, // Assuming no releases check for simplicity
 			)
+		spinner.StopWithMessage("Maturity score calculated")
 
 		// Track analysis duration
 		duration := time.Since(startTime)
@@ -272,10 +299,13 @@ var analyzeCmd = &cobra.Command{
 		output.PrintRecruiterSummary(recruiterSummary)
 
 		// Analyze and print hotspots
+		spinner.Start("🔥 Identifying code hotspots and risk areas...")
 		hotspots, err := analyzer.AnalyzeHotspots(repoInfo, commits, fileTree, client)
 		if err == nil {
+			spinner.StopWithMessage("Code hotspots identified")
 			output.PrintHotspots(hotspots)
 		} else {
+			spinner.Stop()
 			fmt.Printf("\n⚠️ Could not analyze hotspots: %v\n", err)
 		}
 
@@ -297,35 +327,53 @@ func runSummary(repoArg string) error {
 	// Initialize GitHub client
 	client := github.NewClient()
 
+	// Create progress spinner
+	spinner := progress.NewSpinner()
+
 	// Fetch repository information
+	spinner.Start(fmt.Sprintf("🔍 Fetching repository information for %s/%s...", owner, repo))
 	repoInfo, err := client.GetRepo(owner, repo)
 	if err != nil {
+		spinner.Stop()
 		return fmt.Errorf("failed to get repository: %w", err)
 	}
+	spinner.StopWithMessage("Repository information fetched")
 
 	// Fetch commits from the last 30 days
+	spinner.Start("📝 Analyzing recent commit history (last 30 days)...")
 	commits30d, err := client.GetCommits(owner, repo, 30)
 	if err != nil {
+		spinner.Stop()
 		return fmt.Errorf("failed to get commits: %w", err)
 	}
+	spinner.StopWithMessage("Recent commits analyzed")
 
 	// Fetch programming languages
+	spinner.Start("📚 Fetching programming languages...")
 	langs, err := client.GetLanguages(owner, repo)
 	if err != nil {
+		spinner.Stop()
 		return fmt.Errorf("failed to get languages: %w", err)
 	}
+	spinner.StopWithMessage("Languages fetched")
 
 	// Fetch contributors
+	spinner.Start("👥 Fetching contributor information...")
 	contributors, err := client.GetContributors(owner, repo)
 	if err != nil {
+		spinner.Stop()
 		return fmt.Errorf("failed to get contributors: %w", err)
 	}
+	spinner.StopWithMessage(fmt.Sprintf("Contributors fetched (%d contributors)", len(contributors)))
 
 	// Fetch commits for health calculation (last 365 days)
+	spinner.Start("📝 Analyzing full year commit history...")
 	commitsYear, err := client.GetCommits(owner, repo, 365)
 	if err != nil {
+		spinner.Stop()
 		return fmt.Errorf("failed to get yearly commits: %w", err)
 	}
+	spinner.StopWithMessage("Full year history analyzed")
 
 	// Calculate health score
 	score := analyzer.CalculateHealth(repoInfo, commitsYear)

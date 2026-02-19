@@ -7,6 +7,7 @@ import (
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 	"github.com/agnivo988/Repo-lyzer/internal/output"
+	"github.com/agnivo988/Repo-lyzer/internal/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -46,9 +47,12 @@ Examples:
 		// Initialize GitHub client
 		client := github.NewClient()
 
+		// Create progress spinner
+		spinner := progress.NewSpinner()
+
 		// Inform user about fetching
 		if !jsonOutput {
-			fmt.Printf("🔍 Fetching pull requests for %s/%s (state: %s)...\n", owner, repo, state)
+			spinner.Start(fmt.Sprintf("🔍 Fetching pull requests for %s/%s (state: %s)...", owner, repo, state))
 		}
 
 		// Fetch pull requests
@@ -59,10 +63,12 @@ Examples:
 			prs, err = client.GetPullRequests(owner, repo, state)
 		}
 		if err != nil {
+			spinner.Stop()
 			return fmt.Errorf("failed to fetch pull requests: %w", err)
 		}
 
 		if len(prs) == 0 {
+			spinner.Stop()
 			if !jsonOutput {
 				fmt.Printf("No pull requests found for %s/%s with state '%s'\n", owner, repo, state)
 			}
@@ -70,8 +76,11 @@ Examples:
 		}
 
 		if !jsonOutput {
-			fmt.Printf("✓ Found %d pull requests\n", len(prs))
-			fmt.Printf("🔍 Fetching PR details and reviews concurrently...\n")
+			spinner.StopWithMessage(fmt.Sprintf("Found %d pull requests", len(prs)))
+		}
+
+		if !jsonOutput {
+			spinner.Start("🔄 Fetching PR details and reviews concurrently...")
 		}
 
 		// Fetch PR details and reviews concurrently with worker pool
@@ -122,15 +131,12 @@ Examples:
 		for i := 0; i < len(prs); i++ {
 			result := <-results
 
-			if !jsonOutput && (i+1)%10 == 0 {
-				fmt.Printf("Progress: %d/%d PRs fetched\r", i+1, len(prs))
+			if !jsonOutput {
+				spinner.Update(fmt.Sprintf("🔄 Fetching PR details and reviews... %d/%d", i+1, len(prs)))
 			}
 
 			if result.err != nil {
 				errorCount++
-				if !jsonOutput {
-					fmt.Printf("⚠️  Warning: %v                                  \n", result.err)
-				}
 				continue
 			}
 
@@ -147,7 +153,7 @@ Examples:
 		}
 
 		if !jsonOutput {
-			fmt.Printf("✓ Completed fetching %d PRs (%d errors)                    \n\n", len(finalPRs), errorCount)
+			spinner.StopWithMessage(fmt.Sprintf("Fetched %d PRs (%d errors)", len(finalPRs), errorCount))
 		}
 
 		if len(finalPRs) == 0 {
@@ -158,7 +164,13 @@ Examples:
 		prs = finalPRs
 
 		// Analyze pull requests
+		if !jsonOutput {
+			spinner.Start("📊 Analyzing pull request metrics...")
+		}
 		analytics := analyzer.AnalyzePullRequests(prs, reviews)
+		if !jsonOutput {
+			spinner.StopWithMessage("Pull request analysis complete")
+		}
 
 		// Output results
 		if jsonOutput {
