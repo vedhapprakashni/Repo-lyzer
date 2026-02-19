@@ -274,3 +274,101 @@ func (s *Status) Message(message string) {
 func clearLine() string {
 	return "\033[K"
 }
+
+// OverallProgress tracks the overall progress of a multi-step analysis operation
+// It displays both the current step spinner and an overall percentage progress
+type OverallProgress struct {
+	totalSteps     int
+	completedSteps int
+	currentStep    string
+	mu             sync.Mutex
+	spinner        *Spinner
+	startTime      time.Time
+}
+
+// NewOverallProgress creates a new overall progress tracker
+// Parameters:
+//   - totalSteps: Total number of steps in the analysis
+func NewOverallProgress(totalSteps int) *OverallProgress {
+	return &OverallProgress{
+		totalSteps:     totalSteps,
+		completedSteps: 0,
+		currentStep:    "",
+		spinner:        NewSpinner(),
+		startTime:      time.Now(),
+	}
+}
+
+// StartStep begins a new analysis step with a message
+// This updates the current step display and starts the spinner
+func (o *OverallProgress) StartStep(stepMessage string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.currentStep = stepMessage
+	percentage := o.calculatePercentage()
+
+	message := fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps+1, o.totalSteps, percentage)
+	o.spinner.Start(message)
+}
+
+// CompleteStep marks the current step as complete and moves to the next
+func (o *OverallProgress) CompleteStep(stepMessage string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.completedSteps++
+	percentage := o.calculatePercentage()
+
+	o.spinner.StopWithMessage(fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps, o.totalSteps, percentage))
+}
+
+// CompleteStepWithDetails marks the current step as complete with additional details
+func (o *OverallProgress) CompleteStepWithDetails(stepMessage string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.completedSteps++
+	percentage := o.calculatePercentage()
+
+	o.spinner.StopWithMessage(fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps, o.totalSteps, percentage))
+}
+
+// UpdateStep updates the current step message without stopping the spinner
+func (o *OverallProgress) UpdateStep(stepMessage string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.currentStep = stepMessage
+	percentage := o.calculatePercentage()
+
+	message := fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps+1, o.totalSteps, percentage)
+	o.spinner.Update(message)
+}
+
+// Finish completes the analysis operation and displays final summary
+func (o *OverallProgress) Finish() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.spinner.Stop()
+	elapsed := time.Since(o.startTime).Seconds()
+	fmt.Printf("✨ Analysis completed in %.2f seconds\n", elapsed)
+}
+
+// calculatePercentage returns the current completion percentage
+func (o *OverallProgress) calculatePercentage() int {
+	if o.totalSteps == 0 {
+		return 0
+	}
+	return (o.completedSteps * 100) / o.totalSteps
+}
+
+// GetProgress returns current progress information
+// Returns completedSteps, totalSteps, and percentage
+func (o *OverallProgress) GetProgress() (int, int, int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return o.completedSteps, o.totalSteps, o.calculatePercentage()
+}
