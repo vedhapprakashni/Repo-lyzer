@@ -253,8 +253,9 @@ Repo-lyzer features a hierarchical, keyboard-driven menu system for easy navigat
 
 ```bash
 go install github.com/agnivo988/Repo-lyzer@v1.0.6
-repo-lyzer
 ```
+```bash
+repo-lyzer
 
 ---
 
