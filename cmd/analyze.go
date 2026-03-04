@@ -12,6 +12,7 @@ import (
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 	"github.com/agnivo988/Repo-lyzer/internal/output"
+	"github.com/agnivo988/Repo-lyzer/internal/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -163,9 +164,16 @@ var analyzeCmd = &cobra.Command{
 		// Initialize GitHub client
 		client := github.NewClient()
 
+		// Create overall progress tracker for all analysis steps
+		// Estimated steps: repo info, languages, commits, file tree, health,
+		// contributors, bus factor, maturity, hotspots = 9 steps
+		overallProgress := progress.NewOverallProgress(9)
+
 		// Fetch repository information
+		overallProgress.StartStep("🔍 Fetching repository information")
 		repoInfo, err := client.GetRepo(owner, repo)
 		if err != nil {
+			overallProgress.Finish()
 			// Check if it's a private repo error and no token is set
 			if strings.Contains(err.Error(), "repository not found") && !client.HasToken() {
 				fmt.Print("This appears to be a private repository. Please enter your GitHub access token: ")
@@ -175,7 +183,10 @@ var analyzeCmd = &cobra.Command{
 					if token != "" {
 						client.SetToken(token)
 						// Retry fetching the repo with the token
+						overallProgress = progress.NewOverallProgress(9)
+						overallProgress.StartStep("🔍 Fetching repository information")
 						repoInfo, err = client.GetRepo(owner, repo)
+						overallProgress.CompleteStep("Repository information fetched")
 						if err != nil {
 							return fmt.Errorf("failed to access repository even with token: %w", err)
 						}
@@ -189,38 +200,56 @@ var analyzeCmd = &cobra.Command{
 				return err
 			}
 		}
+		overallProgress.CompleteStep("Repository information fetched")
 
 		// Fetch programming languages used in the repository
+		overallProgress.StartStep("📚 Fetching programming languages")
 		langs, err := client.GetLanguages(owner, repo)
 		if err != nil {
+			overallProgress.Finish()
 			return fmt.Errorf("failed to get languages: %w", err)
 		}
+		overallProgress.CompleteStep("Languages fetched")
 
 		// Fetch commits from the last 365 days
+		overallProgress.StartStep("📝 Analyzing commit history (365d)")
 		commits, err := client.GetCommits(owner, repo, 365)
 		if err != nil {
+			overallProgress.Finish()
 			return fmt.Errorf("failed to get commits: %w", err)
 		}
+		overallProgress.CompleteStep(fmt.Sprintf("Commit history analyzed (%d commits)", len(commits)))
 
 		// Fetch file tree for hotspot analysis
+		overallProgress.StartStep("📁 Scanning repository structure")
 		fileTree, err := client.GetFileTree(owner, repo, repoInfo.DefaultBranch)
 		if err != nil {
+			overallProgress.Finish()
 			return fmt.Errorf("failed to get file tree: %w", err)
 		}
+		overallProgress.CompleteStep("File structure scanned")
 
 		// Calculate repository health score
+		overallProgress.StartStep("💪 Computing repository health")
 		score := analyzer.CalculateHealth(repoInfo, commits)
+		overallProgress.CompleteStep("Health score computed")
 
 		// Fetch contributors
+		overallProgress.StartStep("👥 Fetching contributor information")
 		contributors, err := client.GetContributorsWithAvatars(owner, repo, 15)
 		if err != nil {
+			overallProgress.Finish()
 			return err
 		}
+		overallProgress.CompleteStep(fmt.Sprintf("Contributors fetched (%d)", len(contributors)))
 
 		// Calculate bus factor and risk level
+		overallProgress.StartStep("⚠️  Analyzing bus factor and risk")
 		busFactor, busRisk := analyzer.BusFactor(contributors)
+		overallProgress.CompleteStep("Bus factor analysis complete")
 
 		// Calculate repository maturity score and level
+		overallProgress.StartStep("📈 Calculating repository maturity")
 		maturityScore, maturityLevel :=
 			analyzer.RepoMaturityScore(
 				repoInfo,
@@ -228,6 +257,7 @@ var analyzeCmd = &cobra.Command{
 				len(contributors),
 				false, // Assuming no releases check for simplicity
 			)
+		overallProgress.CompleteStep("Maturity score calculated")
 
 		// Track analysis duration
 		duration := time.Since(startTime)
@@ -272,15 +302,18 @@ var analyzeCmd = &cobra.Command{
 		output.PrintRecruiterSummary(recruiterSummary)
 
 		// Analyze and print hotspots
+		overallProgress.StartStep("🔥 Identifying code hotspots")
 		hotspots, err := analyzer.AnalyzeHotspots(repoInfo, commits, fileTree, client)
 		if err == nil {
+			overallProgress.CompleteStep("Code hotspots identified")
 			output.PrintHotspots(hotspots)
 		} else {
+			overallProgress.CompleteStep("Hotspot analysis skipped")
 			fmt.Printf("\n⚠️ Could not analyze hotspots: %v\n", err)
 		}
 
-		// Display analysis time
-		fmt.Printf("\n⏱️  Analysis completed in %.2f seconds\n", duration.Seconds())
+		// Mark analysis as complete
+		overallProgress.Finish()
 
 		return nil
 	},
@@ -297,35 +330,57 @@ func runSummary(repoArg string) error {
 	// Initialize GitHub client
 	client := github.NewClient()
 
+	// Create overall progress tracker for summary analysis steps
+	// Steps: repo info, commits 30d, languages, contributors, commits 365d = 5 steps
+	overallProgress := progress.NewOverallProgress(5)
+
 	// Fetch repository information
+	overallProgress.StartStep("🔍 Fetching repository information")
 	repoInfo, err := client.GetRepo(owner, repo)
 	if err != nil {
+		overallProgress.Finish()
 		return fmt.Errorf("failed to get repository: %w", err)
 	}
+	overallProgress.CompleteStep("Repository information fetched")
 
 	// Fetch commits from the last 30 days
+	overallProgress.StartStep("📝 Analyzing recent commits (30d)")
 	commits30d, err := client.GetCommits(owner, repo, 30)
 	if err != nil {
+		overallProgress.Finish()
 		return fmt.Errorf("failed to get commits: %w", err)
 	}
+	overallProgress.CompleteStep(fmt.Sprintf("Recent commits analyzed (%d)", len(commits30d)))
 
 	// Fetch programming languages
+	overallProgress.StartStep("📚 Fetching programming languages")
 	langs, err := client.GetLanguages(owner, repo)
 	if err != nil {
+		overallProgress.Finish()
 		return fmt.Errorf("failed to get languages: %w", err)
 	}
+	overallProgress.CompleteStep("Languages fetched")
 
 	// Fetch contributors
+	overallProgress.StartStep("👥 Fetching contributor information")
 	contributors, err := client.GetContributors(owner, repo)
 	if err != nil {
+		overallProgress.Finish()
 		return fmt.Errorf("failed to get contributors: %w", err)
 	}
+	overallProgress.CompleteStep(fmt.Sprintf("Contributors fetched (%d)", len(contributors)))
 
 	// Fetch commits for health calculation (last 365 days)
+	overallProgress.StartStep("📝 Analyzing full year history")
 	commitsYear, err := client.GetCommits(owner, repo, 365)
 	if err != nil {
+		overallProgress.Finish()
 		return fmt.Errorf("failed to get yearly commits: %w", err)
 	}
+	overallProgress.CompleteStep("Full year history analyzed")
+
+	// Mark analysis as complete
+	overallProgress.Finish()
 
 	// Calculate health score
 	score := analyzer.CalculateHealth(repoInfo, commitsYear)

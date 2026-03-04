@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 	"github.com/agnivo988/Repo-lyzer/internal/output"
+	"github.com/agnivo988/Repo-lyzer/internal/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -40,18 +40,17 @@ Examples:
 			return fmt.Errorf("invalid repository URL: %w", err)
 		}
 
-		// Record start time for analysis timing
-		startTime := time.Now()
-
 		// Initialize GitHub client
 		client := github.NewClient()
 
-		// Inform user about fetching
-		if !jsonOutput {
-			fmt.Printf("🔍 Fetching pull requests for %s/%s (state: %s)...\n", owner, repo, state)
-		}
+		// Create overall progress tracker
+		overallProgress := progress.NewOverallProgress(3)
 
 		// Fetch pull requests
+		if !jsonOutput {
+			overallProgress.StartStep("🔍 Fetching pull requests")
+		}
+
 		var prs []github.PullRequest
 		if limit > 0 {
 			prs, err = client.GetPullRequestsWithLimit(owner, repo, state, limit)
@@ -59,19 +58,26 @@ Examples:
 			prs, err = client.GetPullRequests(owner, repo, state)
 		}
 		if err != nil {
+			if !jsonOutput {
+				overallProgress.Finish()
+			}
 			return fmt.Errorf("failed to fetch pull requests: %w", err)
 		}
 
 		if len(prs) == 0 {
 			if !jsonOutput {
+				overallProgress.Finish()
 				fmt.Printf("No pull requests found for %s/%s with state '%s'\n", owner, repo, state)
 			}
 			return nil
 		}
 
 		if !jsonOutput {
-			fmt.Printf("✓ Found %d pull requests\n", len(prs))
-			fmt.Printf("🔍 Fetching PR details and reviews concurrently...\n")
+			overallProgress.CompleteStep(fmt.Sprintf("Found %d pull requests", len(prs)))
+		}
+
+		if !jsonOutput {
+			overallProgress.StartStep("🔄 Fetching PR details and reviews")
 		}
 
 		// Fetch PR details and reviews concurrently with worker pool
@@ -122,15 +128,13 @@ Examples:
 		for i := 0; i < len(prs); i++ {
 			result := <-results
 
-			if !jsonOutput && (i+1)%10 == 0 {
-				fmt.Printf("Progress: %d/%d PRs fetched\r", i+1, len(prs))
+			if !jsonOutput {
+				percentage := (i + 1) * 100 / len(prs)
+				overallProgress.UpdateStep(fmt.Sprintf("🔄 Fetching PR details and reviews [%d/%d - %d%%]", i+1, len(prs), percentage))
 			}
 
 			if result.err != nil {
 				errorCount++
-				if !jsonOutput {
-					fmt.Printf("⚠️  Warning: %v                                  \n", result.err)
-				}
 				continue
 			}
 
@@ -147,10 +151,13 @@ Examples:
 		}
 
 		if !jsonOutput {
-			fmt.Printf("✓ Completed fetching %d PRs (%d errors)                    \n\n", len(finalPRs), errorCount)
+			overallProgress.CompleteStep(fmt.Sprintf("PR details fetched (%d errors)", errorCount))
 		}
 
 		if len(finalPRs) == 0 {
+			if !jsonOutput {
+				overallProgress.Finish()
+			}
 			return fmt.Errorf("no PRs could be fetched successfully")
 		}
 
@@ -158,7 +165,14 @@ Examples:
 		prs = finalPRs
 
 		// Analyze pull requests
+		if !jsonOutput {
+			overallProgress.StartStep("📊 Analyzing pull request metrics")
+		}
 		analytics := analyzer.AnalyzePullRequests(prs, reviews)
+		if !jsonOutput {
+			overallProgress.CompleteStep("Pull request analysis complete")
+			overallProgress.Finish()
+		}
 
 		// Output results
 		if jsonOutput {
@@ -169,10 +183,6 @@ Examples:
 			fmt.Println(jsonStr)
 		} else {
 			output.PrintPRAnalytics(analytics)
-
-			// Display analysis time
-			duration := time.Since(startTime)
-			fmt.Printf("⏱️  Analysis completed in %.2f seconds\n", duration.Seconds())
 		}
 
 		return nil

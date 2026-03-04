@@ -12,6 +12,7 @@ import (
 
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
+	"github.com/agnivo988/Repo-lyzer/internal/progress"
 )
 
 // RunCompare executes the compare command for two GitHub repositories.
@@ -64,8 +65,14 @@ Examples:
 
 		client := github.NewClient()
 
+		// Create progress spinner
+		spinner := progress.NewSpinner()
+
+		// Fetch first repository
+		spinner.Start(fmt.Sprintf("🔍 Analyzing %s/%s...", r1[0], r1[1]))
 		repo1, err := client.GetRepo(r1[0], r1[1])
 		if err != nil {
+			spinner.Stop()
 			return err
 		}
 
@@ -73,6 +80,7 @@ Examples:
 		commits1, _ := client.GetCommits(r1[0], r1[1], 14)
 		contributors1, err := client.GetContributorsWithAvatars(r1[0], r1[1], 15)
 		if err != nil {
+			spinner.Stop()
 			fmt.Printf("Error fetching contributors for %s/%s: %v\n", r1[0], r1[1], err)
 			return err
 		}
@@ -82,9 +90,13 @@ Examples:
 		maturityScore1, maturityLevel1 :=
 			analyzer.RepoMaturityScore(repo1, len(commits1), len(contributors1), false)
 
+		spinner.StopWithMessage(fmt.Sprintf("Analyzed %s/%s", r1[0], r1[1]))
+
 		// ---------- Fetch Repo 2 ----------
+		spinner.Start(fmt.Sprintf("🔍 Analyzing %s/%s...", r2[0], r2[1]))
 		repo2, err := client.GetRepo(r2[0], r2[1])
 		if err != nil {
+			spinner.Stop()
 			return err
 		}
 
@@ -92,6 +104,7 @@ Examples:
 		commits2, _ := client.GetCommits(r2[0], r2[1], 14)
 		contributors2, err := client.GetContributorsWithAvatars(r2[0], r2[1], 15)
 		if err != nil {
+			spinner.Stop()
 			fmt.Printf("Error fetching contributors for %s/%s: %v\n", r2[0], r2[1], err)
 			return err
 		}
@@ -100,6 +113,8 @@ Examples:
 
 		maturityScore2, maturityLevel2 :=
 			analyzer.RepoMaturityScore(repo2, len(commits2), len(contributors2), false)
+
+		spinner.StopWithMessage(fmt.Sprintf("Analyzed %s/%s", r2[0], r2[1]))
 
 		// ---------- Output Table ----------
 		fmt.Println("\n📊 Repository Comparison")
