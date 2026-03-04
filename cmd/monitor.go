@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/agnivo988/Repo-lyzer/internal/cache"
+	"github.com/agnivo988/Repo-lyzer/internal/config"
 	"github.com/agnivo988/Repo-lyzer/internal/monitor"
+	"github.com/agnivo988/Repo-lyzer/internal/ui"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +32,10 @@ Examples:
   repo-lyzer monitor golang/go --interval 10m
 
   # Monitor critical production repo every minute
-  repo-lyzer monitor company/production-api --interval 1m`,
+  repo-lyzer monitor company/production-api --interval 1m
+  
+  # Monitor with TUI dashboard
+  repo-lyzer monitor facebook/react --dashboard`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Validate the repository URL format
@@ -43,7 +50,30 @@ Examples:
 			interval = 5 * time.Minute // Default 5 minutes
 		}
 
-		// Create monitor instance
+		// Check if dashboard mode is requested
+		useDashboard, _ := cmd.Flags().GetBool("dashboard")
+		
+		if useDashboard {
+			// Use TUI dashboard
+			cache, err := cache.NewCache()
+			if err != nil {
+				return fmt.Errorf("failed to initialize cache: %w", err)
+			}
+
+			config, err := config.LoadSettings()
+			if err != nil {
+				return fmt.Errorf("failed to load settings: %w", err)
+			}
+
+			model := ui.NewMainModel(cache, config)
+			model.SetStateMonitorDashboard(owner, repo, interval)
+
+			p := tea.NewProgram(model, tea.WithAltScreen())
+			_, err = p.Run()
+			return err
+		}
+
+		// Create monitor instance (CLI mode)
 		mon, err := monitor.NewMonitor(owner, repo, interval)
 		if err != nil {
 			return fmt.Errorf("failed to create monitor: %w", err)
@@ -61,4 +91,5 @@ Examples:
 func init() {
 	rootCmd.AddCommand(monitorCmd)
 	monitorCmd.Flags().Duration("interval", 5*time.Minute, "Monitoring check interval (e.g., 5m, 10m, 1h)")
+	monitorCmd.Flags().Bool("dashboard", false, "Use interactive TUI dashboard for monitoring")
 }
