@@ -29,7 +29,7 @@ func TestParseRequirementsTxt(t *testing.T) {
 			name:    "Package with extras",
 			content: "requests[security]==2.28.0",
 			expected: []Dependency{
-				{Name: "requests[security]", Version: "==2.28.0", Type: "production"},
+				{Name: "requests", Version: "==2.28.0", Type: "production"},
 			},
 		},
 		{
